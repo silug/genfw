@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.27 2002/07/31 17:58:10 steve Exp $'
+# $Id: genfw,v 1.28 2003/04/15 03:18:44 steve Exp $'
 
 ####
 #
@@ -69,7 +69,7 @@ sub clear_all();
 
 use vars qw($VERSION %interface %conf $config_dir %opt);
 
-( $VERSION ) = '$Revision: 1.27 $ ' =~ /\$Revision:\s+([^\s]+)/;
+( $VERSION ) = '$Revision: 1.28 $ ' =~ /\$Revision:\s+([^\s]+)/;
 
 getopts('id', \%opt);
 
@@ -206,10 +206,12 @@ for my $name (keys(%interface))
         for my $cfg (@{$interface{$name}->{'cfg'}})
         {
             debug "interface $name";
-	    debug "  address " . $cfg->{'ipaddr'};
-            debug "  netmask " . $cfg->{'netmask'};
-	    debug "  network " . $cfg->{'network'};
-	    debug "  broadcast " . $cfg->{'broadcast'};
+            if (defined($cfg->{'ipaddr'})) {
+	        debug "  address " . $cfg->{'ipaddr'};
+                debug "  netmask " . $cfg->{'netmask'};
+	        debug "  network " . $cfg->{'network'};
+	        debug "  broadcast " . $cfg->{'broadcast'};
+            }
         }
     }
     debug;
@@ -658,6 +660,9 @@ sub filter_from($$)
 
     for my $cfg (@{$interface{$in}->{'cfg'}})
     {
+        # Skip this on dynamic interfaces.
+        next if (!defined($cfg->{'ipaddr'}));
+
         if ($cfg->{$item} eq $cfg->{'ipaddr'})
 	{
 	    comment "Skipping point-to-point address " . $cfg->{'ipaddr'} . ".";
@@ -687,6 +692,9 @@ sub filter_to($$$)
 
     for my $cfg (@{$interface{$out}->{'cfg'}})
     {
+        # Skip this on dynamic interfaces.
+        next if (!defined($cfg->{'ipaddr'}));
+
         if ($cfg->{$item} eq $cfg->{'ipaddr'})
 	{
 	    comment "Skipping point-to-point address " . $cfg->{'ipaddr'} . ".";
@@ -723,7 +731,7 @@ sub parseconfig($$)
                     warn "$configfile says DEVICE is $value not $name!\n"
                         if ($value!~/^$name(?::\d+)?$/);
                 }
-                elsif ($var=~/^(?:IPADDR|NETMASK|NETWORK|BROADCAST)$/)
+                elsif ($var=~/^(?:IPADDR|NETMASK|NETWORK|BROADCAST|BOOTPROTO)$/)
                 {
                     warn "$name " . lc($var)
                        . " redefined, $configfile line $.\n"
@@ -748,25 +756,28 @@ sub parseconfig($$)
         warn "Couldn't open $configfile: $!\n";
     }
 
-    my $network=inet_ntoa(inet_aton($cfg{'ipaddr'})
-                          & inet_aton($cfg{'netmask'}));
-    my $broadcast=inet_ntoa(inet_aton($cfg{'ipaddr'})
-                            | (~ inet_aton($cfg{'netmask'})));
+    if ($cfg{'bootproto'} eq 'none' or $cfg{'bootproto'} eq 'static') {
+        my $network=inet_ntoa(inet_aton($cfg{'ipaddr'})
+                              & inet_aton($cfg{'netmask'}));
+        my $broadcast=inet_ntoa(inet_aton($cfg{'ipaddr'})
+                                | (~ inet_aton($cfg{'netmask'})));
 
-    debug "Calculated network $network, broadcast $broadcast";
+        debug "Calculated network $network, broadcast $broadcast";
 
-    if ($network ne $cfg{'network'})
-    {
-	warn "$configfile has incorrect network address $cfg{'network'}\n"
-	    if ($cfg{'network'});
-	$cfg{'network'}=$network;
-    }
+        if ($network ne $cfg{'network'}) {
+	    warn "$configfile has incorrect network address $cfg{'network'}\n"
+	        if ($cfg{'network'});
+	    $cfg{'network'}=$network;
+        }
 
-    if ($broadcast ne $cfg{'broadcast'})
-    {
-	warn "$configfile has incorrect broadcast address $cfg{'broadcast'}\n"
-	    if ($cfg{'broadcast'});
-	$cfg{'broadcast'}=$broadcast;
+        if ($broadcast ne $cfg{'broadcast'}) {
+	    warn "$configfile has incorrect broadcast address $cfg{'broadcast'}\n"
+	        if ($cfg{'broadcast'});
+	    $cfg{'broadcast'}=$broadcast;
+        }
+    } else {
+        # We leave ipaddr undefined to denote a dynamic interface.
+        $cfg{'ipaddr'}=undef;
     }
 
     return %cfg;
