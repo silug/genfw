@@ -32,7 +32,10 @@ rm -rf %{buildroot}
 mkdir -p %{buildroot}/etc/rc.d/init.d \
          %{buildroot}/etc/sysconfig/genfw \
          %{buildroot}/usr/sbin
-INSTPREFIX=%{buildroot} PREFIX=/usr BINDIR=%{buildroot}/usr/sbin ./install.sh
+export INSTPREFIX=%{buildroot}
+export PREFIX=%{buildroot}/usr
+export BINDIR=%{buildroot}/usr/sbin
+./install.sh
 
 %clean
 rm -rf %{buildroot}
