@@ -1,5 +1,5 @@
 Name:		genfw
-Version:	1.27
+Version:	%(perl -MExtUtils::MakeMaker -le 'print ExtUtils::MM_Unix::parse_version("", "genfw")')
 Release:	1
 Packager:	Steven Pritchard <steve@kspei.com>
 URL:		http://www.kspei.com/projects/genfw/
@@ -9,6 +9,7 @@ License:	GPL
 BuildRoot:	%{_tmppath}/%{name}-%{version}
 Summary:	Tool for building iptables-based firewalls.
 BuildArch:	noarch
+BuildRequires:	perl
 Requires:	iptables
 Requires:	perl
 Requires:	perl(FileHandle)
