@@ -30,14 +30,16 @@ firewall by using a simple text-based configuration file.
 %install
 [ "%{buildroot}" = "/" -o -z "%{buildroot}" ] && exit 1
 rm -rf %{buildroot}
-mkdir -p %{buildroot}/etc/rc.d/init.d \
-         %{buildroot}/etc/sysconfig/genfw \
-         %{buildroot}/usr/sbin \
-         %{buildroot}/usr/share/man/man8
-export INSTPREFIX=%{buildroot}
-export PREFIX=%{buildroot}/usr
-export BINDIR=%{buildroot}/usr/sbin
-./install.sh
+mkdir -p %{buildroot}/%{_initrddir} \
+         %{buildroot}/%{_sysconfdir}/sysconfig/genfw \
+         %{buildroot}/%{_sbindir} \
+         %{buildroot}/%{_mandir}/man8
+
+cp genfw %{buildroot}/%{_sbindir}/genfw
+cp firewall.init %{buildroot}/%{_initrddir}/firewall
+
+pod2man genfw > genfw.8
+cp genfw.8 %{buildroot}/%{_mandir}/genfw.8
 
 %clean
 rm -rf %{buildroot}
@@ -56,5 +58,8 @@ chkconfig --add firewall
 %{_mandir}/man8/genfw.8*
 
 %changelog
+* Mon Apr 14 2003 Steven Pritchard <steve@kspei.com> 1.28
+- Cleanup
+
 * Tue Jul 30 2002 Steven Pritchard <steve@kspei.com>
 - Initial packaging
