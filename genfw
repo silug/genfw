@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.29 2003/04/15 03:52:40 steve Exp $'
+# $Id: genfw,v 1.30 2003/04/19 05:45:01 steve Exp $'
 
 ####
 #
@@ -69,20 +69,17 @@ sub clear_all();
 
 use vars qw($VERSION %interface %conf $config_dir %opt);
 
-( $VERSION ) = '$Revision: 1.29 $ ' =~ /\$Revision:\s+([^\s]+)/;
+( $VERSION ) = '$Revision: 1.30 $ ' =~ /\$Revision:\s+([^\s]+)/;
 
 getopts('id', \%opt);
 
-if (defined($ENV{'DEBUG'}) || $opt{'d'})
-{
+if (defined($ENV{'DEBUG'}) || $opt{'d'}) {
     $config_dir=".";
     $|=1;
     my $oldfh=select(STDERR);
     $|=1;
     select($oldfh);
-}
-else
-{
+} else {
     $config_dir="/etc/sysconfig";
 }
 
@@ -94,18 +91,14 @@ my $fh=new FileHandle "<$config_dir/genfw/rules"
 
 # *FIXME* - need to handle when the last line ends in '\'
 my $last;
-while (<$fh>)
-{
+while (<$fh>) {
     chomp;
     s/(?<!\\)#.*$//; # Strip comments ("\" escapes "#") *FIXME* - we never strip them
     $_=$last.$_ if ($last);
-    if (s/\\$//)
-    {
+    if (s/\\\s*$//) {
         $last=$_;
 	next;
-    }
-    else
-    {
+    } else {
         $last="";
     }
     next if (/^\s*$/); # Skip blank lines
@@ -119,40 +112,28 @@ while (<$fh>)
         my $type=$1;
         shift @parts;
         my $name=shift(@parts);
-        if (!$name)
-        {
+        if (!$name) {
             warn "No interface defined:\n\t$_\nSkipping...\n";
             next;
         }
         debug "Interface $name, type $type found.";
-        if (defined($interface{$name}))
-        {
+        if (defined($interface{$name})) {
             warn "Skipping duplicate definition for interface $name:\n\t$_\n";
             next;
         }
         $interface{$name}={'type' => $type};
-        if (@parts)
-        {
+        if (@parts) {
             $interface{$name}->{'flags'}=[@parts];
             debug "interface $name flags \"@{$interface{$name}->{'flags'}}\"";
         }
-    }
-    elsif (defined($parts[1]) and ($parts[1] eq "logging"))
-    {
-	if ($parts[0] eq "no")
-	{
+    } elsif (defined($parts[1]) and ($parts[1] eq "logging")) {
+	if ($parts[0] eq "no") {
 	    $conf{'log'}=[];
-	}
-	elsif ($parts[0] eq "limit")
-	{
+	} elsif ($parts[0] eq "limit") {
 	    $conf{'log'}=[qw(-m limit -j LOG)];
-	}
-	elsif ($parts[0] eq "full")
-	{
+	} elsif ($parts[0] eq "full") {
 	    $conf{'log'}=[qw(-j LOG)];
-	}
-	else
-	{
+	} else {
 	    warn "I don't know what you mean by '@parts[0,1]' (line $.).\n";
 	    next;
 	}
@@ -170,19 +151,15 @@ while (<$fh>)
 	#}
 	$parts[0]=~s/^filter://;
 	push(@{$conf{$parts[0]}->{$parts[1]}}, [@parts[2..$#parts]]);
-    }
-    else
-    {
+    } else {
 	warn "Skipping bogus line ($.):\n\t$_\n";
 	next;
     }
     debug;
 }
 
-for my $name (keys(%interface))
-{
-    if (grep(/^ignore$/, @{$interface{$name}->{'flags'}}))
-    {
+for my $name (keys(%interface)) {
+    if (grep(/^ignore$/, @{$interface{$name}->{'flags'}})) {
         debug "Skipping interface $name";
         debug;
         next;
@@ -191,20 +168,17 @@ for my $name (keys(%interface))
     my $dir=new DirHandle "$config_dir/network-scripts"
         or die "Failed to open $config_dir/network-scripts: $!\n";
     my @configs=("$config_dir/network-scripts/ifcfg-$name");
-    for my $file (grep(/^ifcfg-$name:\d+$/, $dir->read))
-    {
+    for my $file (grep(/^ifcfg-$name:\d+$/, $dir->read)) {
 	push(@configs, "$config_dir/network-scripts/$file");
     }
-    for my $configfile (@configs)
-    {
+    for my $configfile (@configs) {
 	debug "configfile: $configfile";
 
         my %cfg=parseconfig($configfile, $name);
 	next if (!%cfg);
 
         push(@{$interface{$name}->{'cfg'}}, \%cfg);
-        for my $cfg (@{$interface{$name}->{'cfg'}})
-        {
+        for my $cfg (@{$interface{$name}->{'cfg'}}) {
             debug "interface $name";
             if (defined($cfg->{'ipaddr'})) {
 	        debug "  address " . $cfg->{'ipaddr'};
@@ -226,8 +200,7 @@ generate_rules(%interface);
 # Subs
 #
 
-sub reject_auth($$)
-{
+sub reject_auth($$) {
     my ($in, $out)=@_;
 
     iptables "-A", label($in) . "-" . label($out),
@@ -236,25 +209,21 @@ sub reject_auth($$)
            qw(-p udp --dport 113 -j REJECT --reject-with icmp-port-unreachable);
 }
 
-sub check_allowed($$)
-{
+sub check_allowed($$) {
     my ($in, $out)=@_;
 
     debug "checking for allowed traffic to interface $out";
     my @allow=grep /^allow=/,
                    @{$interface{$out}->{'flags'}};
 
-    if (@allow)
-    {
+    if (@allow) {
         my @open_port;
 
-        for my $item (@allow)
-        {
+        for my $item (@allow) {
             debug "parsing '$item'";
             $item=~s/^allow=//;
             next if (!$item);
-            for my $ports (split /,/, $item)
-            {
+            for my $ports (split /,/, $item) {
 		# *FIXME* - probably should verify that source
 		# & destination are valid-looking addresses
 	        my ($port, $proto, $from, $to, $interface)=
@@ -265,39 +234,29 @@ sub check_allowed($$)
 			      (?::(.*?))?     # source interface
 			     $/x;
 		next if ($interface and $interface ne $in);
-		if (!$proto)
-		{
-		    if ($port=~/^\d+$/)
-		    {
+		if (!$proto) {
+		    if ($port=~/^\d+$/) {
 			warn "ambiguous allow '$port', ignoring...\n";
 			next;
 		    }
 		    my $found=0;
-		    for $proto ("tcp", "udp")
-		    {
+		    for $proto ("tcp", "udp") {
 		        if (getservbyname($port, $proto))
 		        {
 			    push(@open_port, [$port, $proto, $from, $to]);
 			    $found++;
 		        }
 		    }
-		    if (!$found)
-		    {
-			if (getprotobyname($port))
-			{
+		    if (!$found) {
+			if (getprotobyname($port)) {
 			    push(@open_port, [undef, $port, $from, $to]);
-			}
-			else
-			{
+			} else {
 			    warn "ambiguous allow '$port', ignoring...\n";
 			    next;
 			}
 		    }
-		}
-		else
-		{
-                    if ($port!~/^\d+$/ and !getservbyname($port, $proto))
-		    {
+		} else {
+                    if ($port!~/^\d+$/ and !getservbyname($port, $proto)) {
 		        warn "invalid port/proto '$port/$proto', ignoring...\n";
 			next;
 		    }
@@ -307,8 +266,7 @@ sub check_allowed($$)
             }
         }
 
-        for my $port (@open_port)
-        {
+        for my $port (@open_port) {
             debug "allowing proto ", $port->[1],
                   defined($port->[0]) ?
                       ", port " . $port->[0] : "",
@@ -321,8 +279,7 @@ sub check_allowed($$)
     }
 }
 
-sub allow($$@)
-{
+sub allow($$@) {
     my ($in, $out, $port, $proto, $from, $to)=@_;
 
     iptables "-A", label($in) . "-" . label($out),
@@ -331,30 +288,22 @@ sub allow($$@)
 	     qw(-j ACCEPT);
 }
 
-sub label($)
-{
+sub label($) {
     my ($name)=@_;
 
-    if (my ($label)=grep /^label=/, @{$interface{$name}->{'flags'}})
-    {
+    if (my ($label)=grep /^label=/, @{$interface{$name}->{'flags'}}) {
 	$label=~s/^label=(.*)$/$1/;
-	if ($label)
-	{
+	if ($label) {
 	    return $label;
-	}
-	else
-	{
+	} else {
 	    return $name;
 	}
-    }
-    else
-    {
+    } else {
 	return $name;
     }
 }
 
-sub generate_rules(%)
-{
+sub generate_rules(%) {
     my %interface=@_;
 
     begin_script;
@@ -371,12 +320,10 @@ sub generate_rules(%)
     new_chain("icmp-filter");
     iptables qw(-A icmp-filter -p icmp -j ACCEPT);
 
-    for my $in (keys(%interface))
-    {
+    for my $in (keys(%interface)) {
         next if (grep(/^ignore$/, @{$interface{$in}->{'flags'}}));
 
-	for my $out (keys(%interface))
-	{
+	for my $out (keys(%interface)) {
             next if ($in eq $out or
                      grep(/^ignore$/, @{$interface{$out}->{'flags'}}));
 
@@ -390,9 +337,7 @@ sub generate_rules(%)
 	        $interface{$out}->{'type'} eq "out")
 	    {
 	        drop($in, $out);
-	    }
-	    else
-	    {
+	    } else {
 	        # Filter traffic to the network address.
 		filter_to($in, $out, "network");
 		# Filter traffic to the broadcast address.
@@ -407,9 +352,7 @@ sub generate_rules(%)
 		    debug "append($label)";
 		    append($label);
 		    &main::accept($in, $out);
-		}
-		else
-		{
+		} else {
 		    check_allowed($in, $out);
 		    debug "append($label)";
 		    append($label);
@@ -422,8 +365,7 @@ sub generate_rules(%)
 	}
     }
 
-    for my $in (keys(%interface))
-    {
+    for my $in (keys(%interface)) {
         next if (grep(/^ignore$/, @{$interface{$in}->{'flags'}}));
 
 	comment_block("Filter traffic from " . label($in) . ".");
@@ -437,16 +379,12 @@ sub generate_rules(%)
 	filter_from($in, "network");
 	filter_from($in, "broadcast");
 
-	for my $out (keys(%interface))
-	{
+	for my $out (keys(%interface)) {
             next if (grep(/^ignore$/, @{$interface{$out}->{'flags'}}));
 
-	    if ($in eq $out)
-	    {
+	    if ($in eq $out) {
 	        iptables("-A", label($in), "-o", $out, "-j", "ACCEPT");
-	    }
-	    else
-	    {
+	    } else {
                 iptables("-A", label($in), "-o", $out, "-j",
 		         label($in) . "-" . label($out));
 	    }
@@ -463,8 +401,7 @@ sub generate_rules(%)
     iptables qw(-A INPUT -j established);
     iptables qw(-A INPUT -i lo -j ACCEPT);
 
-    for my $iface (keys(%interface))
-    {
+    for my $iface (keys(%interface)) {
 	next if (grep /^ignore$/, @{$interface{$iface}->{'flags'}});
 
 	if (($interface{$iface}->{'type'} eq "int") &&
@@ -499,8 +436,7 @@ sub generate_rules(%)
     debug "insert(FORWARD)";
     insert("FORWARD");
 
-    for my $in (keys(%interface))
-    {
+    for my $in (keys(%interface)) {
         next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
 
 	iptables qw(-A FORWARD -i), $in, "-j", label($in);
@@ -519,24 +455,20 @@ sub generate_rules(%)
     debug "insert(nat:POSTROUTING)";
     insert("nat:POSTROUTING");
 
-    for my $in (keys(%interface))
-    {
+    for my $in (keys(%interface)) {
         next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
 
         debug "checking interface $in";
-	if (grep /^nat$/, @{$interface{$in}->{'flags'}})
-	{
+	if (grep /^nat$/, @{$interface{$in}->{'flags'}}) {
 	    debug "need to nat interface $in";
-	    for my $out (keys(%interface))
-	    {
+	    for my $out (keys(%interface)) {
 		next if ($in eq $out or
 		         $interface{$out}->{'type'} ne "out" or
 		         grep /^ignore$/, @{$interface{$out}->{'flags'}});
 
 		debug "found interface $out to nat out";
 
-		for my $iface ($in, $out)
-		{
+		for my $iface ($in, $out) {
                     if (!defined($interface{$iface}->{'cfg'})
                         or !@{$interface{$iface}->{'cfg'}})
                     {
@@ -552,8 +484,7 @@ sub generate_rules(%)
 		#	 "using first address found.\n";
 		#}
 
-		for my $cfg (@{$interface{$in}->{'cfg'}})
-		{
+		for my $cfg (@{$interface{$in}->{'cfg'}}) {
                     # *FIXME* - need to handle aliased interfaces on the same
                     # subnet correctly (without adding additional rules)
                     # *FIXME* - This also isn't going to work if the *inside*
@@ -582,14 +513,12 @@ sub generate_rules(%)
     debug "insert(nat:PREROUTING)";
     insert("nat:PREROUTING");
 
-    for my $in (keys(%interface))
-    {
+    for my $in (keys(%interface)) {
         debug "PREROUTING: checking $in...";
         next if ($interface{$in}->{'type'} ne "out" or
 	         grep /^ignore$/, @{$interface{$in}->{'flags'}});
 
-	for my $out (keys(%interface))
-	{
+	for my $out (keys(%interface)) {
             debug "PREROUTING:   checking $out -> $in...";
 	    next if ($in eq $out or $interface{$out}->{'type'} eq "out" or
 		     grep /^ignore$/, @{$interface{$out}->{'flags'}} or
@@ -597,8 +526,7 @@ sub generate_rules(%)
 
 	    debug "filtering traffic to $out from $in...";
 
-	    for my $cfg (@{$interface{$out}->{'cfg'}})
-	    {
+	    for my $cfg (@{$interface{$out}->{'cfg'}}) {
                 # *FIXME* - need to handle aliased interfaces on the same
                 # subnet correctly (without adding additional rules)
 		my @rule=(qw(-t nat -A PREROUTING -i), $in, "-d",
@@ -622,22 +550,19 @@ sub generate_rules(%)
     append("nat:OUTPUT");
 }
 
-sub icmpfilter($$)
-{
+sub icmpfilter($$) {
     my ($in, $out)=@_;
 
     iptables "-A", label($in) . "-" . label($out), qw(-j icmp-filter);
 }
 
-sub established($$)
-{
+sub established($$) {
     my ($in, $out)=@_;
 
     iptables "-A", label($in) . "-" . label($out), qw(-j established);
 }
 
-sub drop($$)
-{
+sub drop($$) {
     my ($in, $out)=@_;
 
     iptables "-A", label($in) . "-" . label($out), @{$conf{'log'}},
@@ -646,34 +571,29 @@ sub drop($$)
     iptables "-A", label($in) . "-" . label($out), qw(-j DROP);
 }
 
-sub accept($$)
-{
+sub accept($$) {
     my ($in, $out)=@_;
 
     iptables "-A", label($in) . "-" . label($out), qw(-j ACCEPT);
 }
 
-sub filter_from($$)
-{
+sub filter_from($$) {
     my ($in, $item)=@_;
 
     debug "$in, filtering from $item";
 
-    if (!defined($interface{$in}->{'cfg'}) or !@{$interface{$in}->{'cfg'}})
-    {
+    if (!defined($interface{$in}->{'cfg'}) or !@{$interface{$in}->{'cfg'}}) {
 	warn "I have no configuration for interface $in!\n";
 	return;
     }
 
     comment "Filter traffic from the $item address(es).";
 
-    for my $cfg (@{$interface{$in}->{'cfg'}})
-    {
+    for my $cfg (@{$interface{$in}->{'cfg'}}) {
         # Skip this on dynamic interfaces.
         next if (!defined($cfg->{'ipaddr'}));
 
-        if ($cfg->{$item} eq $cfg->{'ipaddr'})
-	{
+        if ($cfg->{$item} eq $cfg->{'ipaddr'}) {
 	    comment "Skipping point-to-point address " . $cfg->{'ipaddr'} . ".";
 	    next;
 	}
@@ -685,27 +605,23 @@ sub filter_from($$)
     }
 }
 
-sub filter_to($$$)
-{
+sub filter_to($$$) {
     my ($in, $out, $item)=@_;
 
     debug "$in -> $out, filtering to $item";
 
-    if (!defined($interface{$out}->{'cfg'}) or !@{$interface{$out}->{'cfg'}})
-    {
+    if (!defined($interface{$out}->{'cfg'}) or !@{$interface{$out}->{'cfg'}}) {
 	warn "I have no configuration for interface $out!\n";
 	return;
     }
 
     comment "Filter traffic to the $item address(es).";
 
-    for my $cfg (@{$interface{$out}->{'cfg'}})
-    {
+    for my $cfg (@{$interface{$out}->{'cfg'}}) {
         # Skip this on dynamic interfaces.
         next if (!defined($cfg->{'ipaddr'}));
 
-        if ($cfg->{$item} eq $cfg->{'ipaddr'})
-	{
+        if ($cfg->{$item} eq $cfg->{'ipaddr'}) {
 	    comment "Skipping point-to-point address " . $cfg->{'ipaddr'} . ".";
 	    next;
 	}
@@ -717,26 +633,21 @@ sub filter_to($$$)
     }
 }
 
-sub parseconfig($$)
-{
+sub parseconfig($$) {
     my ($configfile, $name)=@_;
     my %cfg;
 
-    if (my $config=new FileHandle "<$configfile")
-    {
-        while (<$config>)
-        {
+    if (my $config=new FileHandle "<$configfile") {
+        while (<$config>) {
             chomp;
             s/(?<!\\)#.*$//; # Strip comments ("\" escapes "#") *FIXME* - we never strip them
             next if (/^\s*$/); # Skip blank lines
 
             debug $_;
-            if (/^\s*(\S+)\s*=\s*"?(\S+?)"?\s*$/)
-            {
+            if (/^\s*(\S+)\s*=\s*"?(\S+?)"?\s*$/) {
                 my ($var, $value)=($1, $2);
 
-                if ($var eq "DEVICE")
-                {
+                if ($var eq "DEVICE") {
                     warn "$configfile says DEVICE is $value not $name!\n"
                         if ($value!~/^$name(?::\d+)?$/);
                 }
@@ -746,22 +657,16 @@ sub parseconfig($$)
                        . " redefined, $configfile line $.\n"
                         if (defined($cfg{lc($var)}));
                     $cfg{lc($var)}=$value;
-                }
-                else
-                {
+                } else {
                     debug "Skipping uninteresting variable $var...";
                 }
-            }
-            else
-            {
+            } else {
                 warn "Skipping strange configuration line:\n\t$_\n"
                    . "$configfile line $.\n";
                 next;
             }
         }
-    }
-    else
-    {
+    } else {
         warn "Couldn't open $configfile: $!\n";
     }
 
@@ -792,36 +697,29 @@ sub parseconfig($$)
     return %cfg;
 }
 
-sub debug(@)
-{
+sub debug(@) {
     return if (!defined($ENV{'DEBUG'}));
-    if (!@_)
-    {
+    if (!@_) {
         print STDERR "\n";
-    }
-    else
-    {
+    } else {
         #print STDERR "\033[37;1md:\033[0m ", @_, "\n";
         print STDERR bold("d: "), @_, "\n";
     }
 }
 
-sub bold($)
-{
+sub bold($) {
     return @_ if (!-t STDERR);
     return "\033[37;1m" . $_[0] . "\033[0m";
 }
 
-sub comment_block(@)
-{
+sub comment_block(@) {
     return if ($opt{'i'});
 
     print "\n####\n";
     comment_long(@_);
 }
 
-sub comment_long(@)
-{
+sub comment_long(@) {
     return if ($opt{'i'});
 
     print "#\n";
@@ -829,52 +727,41 @@ sub comment_long(@)
     print "#\n";
 }
 
-sub comment(@)
-{
+sub comment(@) {
     return if ($opt{'i'});
 
-    for my $line (@_)
-    {
+    for my $line (@_) {
 	print "# $line\n";
     }
 }
 
-sub begin_script()
-{
+sub begin_script() {
     return if ($opt{'i'});
 
     print "#!/bin/sh\n\n";
 }
 
-sub set_policy($$$)
-{
+sub set_policy($$$) {
     my @chain=("INPUT", "OUTPUT", "FORWARD");
 
-    for (my $n=0;$n<3;$n++)
-    {
+    for (my $n=0;$n<@chain;$n++) {
 	iptables("-P", $chain[$n], $_[$n]);
     }
 }
 
-sub iptables(@)
-{
+sub iptables(@) {
     my @command=("iptables");
 
-    if ($opt{'i'})
-    {
+    if ($opt{'i'}) {
         push(@command, @_);
         debug "Running '@command' (" . scalar(@command) . " args)...";
 	warn "'@command' failed with exit value " . ($? >> 8)
 	    if (system(@command) != 0);
-    }
-    else
-    {
+    } else {
         my @bits=@_;
 
-        for my $part (@bits)
-        {
-	    if ($part=~/[^\w\-\.\/]/)
-	    {
+        for my $part (@bits) {
+	    if ($part=~/[^\w\-\.\/]/) {
 	        $part=~s/'/'\''/g;
 	        $part="'$part'";
 	    }
@@ -884,53 +771,43 @@ sub iptables(@)
     }
 }
 
-sub new_chain($)
-{
+sub new_chain($) {
     iptables("-N", $_[0]);
 }
 
-sub insert($)
-{
+sub insert($) {
     action('insert', $_[0]);
 }
 
-sub append($)
-{
+sub append($) {
     action('append', $_[0]);
 }
 
-sub action($$)
-{
+sub action($$) {
     my ($action, $label)=@_;
     my $table=undef;
     my $chain;
 
-    if ($label=~/^([^:]+):(.*)$/)
-    {
+    if ($label=~/^([^:]+):(.*)$/) {
 	$table=$1;
 	$chain=$2;
-    }
-    else
-    {
+    } else {
 	$chain=$label;
     }
 
     debug "$action in $chain" . (defined $table ? ", table '$table'" : "");
 
-    if (defined($conf{$action}) and defined($conf{$action}->{$label}))
-    {
+    if (defined($conf{$action}) and defined($conf{$action}->{$label})) {
 	my @rules=@{$conf{$action}->{$label}};
 	@rules=reverse @rules if ($action eq 'insert');
-        for my $rule (@rules)
-        {
+        for my $rule (@rules) {
 	    debug "Adding rule '@{$rule}'...";
 	    iptables $table ? ("-t", $table) : (), "-A", $chain, @{$rule};
         }
     }
 }
 
-sub clear_all()
-{
+sub clear_all() {
     iptables "-F";
     iptables "-X";
     iptables qw(-t nat -F);
