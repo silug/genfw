@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.20 2002/02/25 19:30:42 steve Exp $
+# $Id: genfw,v 1.21 2002/03/06 15:19:42 steve Exp $
 
 ####
 #
@@ -24,6 +24,8 @@
 #     * FIXME - It would probably be good to set the default policy for
 #               chains in other tables (like nat) to DROP and then add
 #               explicit rules for accepting packets.
+#     * FIXME - We get warnings when things (like NETWORK and BROADCAST)
+#               aren't defined in ifcfg-*.
 #
 ####
 
@@ -536,11 +538,12 @@ sub generate_rules(%)
                     }
 		}
 
-		if (@{$interface{$out}->{'cfg'}}>1)
-		{
-		    warn "interface $out has multiple configurations, " .
-			 "using first address found.\n";
-		}
+		# I can't see where there is any point to this warning.
+		#if (@{$interface{$out}->{'cfg'}}>1)
+		#{
+		#    warn "interface $out has multiple configurations, " .
+		#	 "using first address found.\n";
+		#}
 
 		for my $cfg (@{$interface{$in}->{'cfg'}})
 		{
