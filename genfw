@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.21 2002/03/06 15:19:42 steve Exp $
+# $Id: genfw,v 1.22 2002/03/07 16:55:49 steve Exp $'
 
 ####
 #
@@ -26,6 +26,9 @@
 #               explicit rules for accepting packets.
 #     * FIXME - We get warnings when things (like NETWORK and BROADCAST)
 #               aren't defined in ifcfg-*.
+#     * FIXME - We should be dropping reserved addresses.
+#     * FIXME - We should be dropping traffic to/from port 0.
+#     * FIXME - Users should be able to add arbitrary chains.
 #
 ####
 
@@ -64,7 +67,9 @@ sub append($);
 sub action($$);
 sub clear_all();
 
-use vars qw(%interface %conf $config_dir %opt);
+use vars qw($VERSION %interface %conf $config_dir %opt);
+
+( $VERSION ) = '$Revision: 1.22 $ ' =~ /\$Revision:\s+([^\s]+)/;
 
 getopts('id', \%opt);
 

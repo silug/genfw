@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# chkconfig: 2345 08 92
+#
+# description: Automates a packet filtering firewall with iptables using genfw.
+#
+# Script Author: Steven Pritchard <steve@silug.org>
+# Based on the iptables init script.
+#
+# config: /etc/sysconfig/rules
+
+# Source 'em up
+. /etc/init.d/functions
+
+case "$1" in
+  start)
+	action $"Applying firewall rules" /usr/local/bin/genfw -i
+	;;
+
+  stop)
+	# We don't really want to do anything here.
+	;;
+
+  restart)
+	# "restart" is really just "start" as this isn't a daemon,
+	#  and "start" clears any pre-defined rules anyway.
+	#  This is really only here to make those who expect it happy
+	exec $0 start
+	;;
+
+  *)
+	echo $"Usage: $0 {start|stop|restart}"
+	exit 1
+esac
+
+exit 0
+
