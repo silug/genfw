@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.19 2002/02/25 19:23:20 steve Exp $
+# $Id: genfw,v 1.20 2002/02/25 19:30:42 steve Exp $
 
 ####
 #
@@ -819,7 +819,7 @@ sub iptables(@)
     {
         push(@command, @_);
         debug "Running '@command' (" . scalar(@command) . " args)...";
-	die "'@command' failed with exit value " . ($? >> 8)
+	warn "'@command' failed with exit value " . ($? >> 8)
 	    if (system(@command) != 0);
     }
     else
