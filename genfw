@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.25 2002/07/31 17:32:41 steve Exp $'
+# $Id: genfw,v 1.26 2002/07/31 17:56:49 steve Exp $'
 
 ####
 #
@@ -69,7 +69,7 @@ sub clear_all();
 
 use vars qw($VERSION %interface %conf $config_dir %opt);
 
-( $VERSION ) = '$Revision: 1.25 $ ' =~ /\$Revision:\s+([^\s]+)/;
+( $VERSION ) = '$Revision: 1.26 $ ' =~ /\$Revision:\s+([^\s]+)/;
 
 getopts('id', \%opt);
 
@@ -658,6 +658,11 @@ sub filter_from($$)
 
     for my $cfg (@{$interface{$in}->{'cfg'}})
     {
+        if ($cfg->{$item} eq $cfg->{'ipaddr'})
+	{
+	    comment "Skipping point-to-point address " . $cfg->{'ipaddr'} ".";
+	    next;
+	}
         my @rule=("-A", label($in), "-d", $cfg->{$item});
 	iptables @rule, @{$conf{'log'}}, "--log-prefix",
 	         label($in) . " - from $item: "
@@ -682,6 +687,11 @@ sub filter_to($$$)
 
     for my $cfg (@{$interface{$out}->{'cfg'}})
     {
+        if ($cfg->{$item} eq $cfg->{'ipaddr'})
+	{
+	    comment "Skipping point-to-point address " . $cfg->{'ipaddr'} ".";
+	    next;
+	}
         my @rule=("-A", label($in) . "-" . label($out), "-d", $cfg->{$item});
 	iptables @rule, @{$conf{'log'}}, "--log-prefix",
 	         label($in) . "-" . label($out) . " - to $item: "
