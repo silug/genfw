@@ -22,7 +22,7 @@ genfw automates much of the work of building an iptables-based
 firewall by using a simple text-based configuration file.
 
 %prep
-setup -q
+%setup -q
 
 %build
 
