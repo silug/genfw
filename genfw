@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.13 2002/01/31 12:52:37 steve Exp $
+# $Id: genfw,v 1.14 2002/01/31 14:44:21 steve Exp $
 
 ####
 #
@@ -45,11 +45,15 @@ sub debug(@);
 sub bold($);
 sub generate_rules(%);
 sub comment_block(@);
+sub comment_long(@);
 sub comment(@);
 sub begin_script();
 sub set_policy($$$);
 sub iptables(@);
 sub new_chain($);
+sub insert($);
+sub append($);
+sub action($$);
 
 use vars qw(%interface %conf $config_dir);
 
@@ -132,6 +136,19 @@ while (<$fh>)
 	    warn "I don't know what you mean by '@parts[0,1]' (line $.).\n";
 	    next;
 	}
+    }
+    elsif ($parts[0]=~/^(append|insert)$/
+           and defined($parts[1]) and defined($parts[2]))
+    {
+	if ($parts[1]!~
+		/^((filter:)?(INPUT|OUTPUT|FORWARD)|nat:(PRE|POST)ROUTING)$/)
+	{
+	    warn "Ignoring $parts[0] on unknown chain $parts[1] "
+	       . "(rules line $.).\n";
+	    next;
+	}
+	$parts[0]=~s/^filter://;
+	push(@{$conf{$parts[0]}->{$parts[1]}}, [@parts[2..$#parts]]);
     }
     else
     {
@@ -318,14 +335,14 @@ sub generate_rules(%)
     my %interface=@_;
 
     begin_script;
-    comment("Set default policy to DROP.");
+    comment_long "Set default policy to DROP.";
     set_policy("DROP", "DROP", "DROP");
-    comment_block("User-defined chains.");
-    comment("Allow established connections.");
+    comment_block "User-defined chains.";
+    comment_long "Allow established connections.";
     new_chain("established");
     iptables qw(-A established -m state --state), "ESTABLISHED,RELATED",
 	     qw(-j ACCEPT);
-    comment("Filter ICMP traffic.");
+    comment_long "Filter ICMP traffic.";
     new_chain("icmp-filter");
     iptables qw(-A icmp-filter -p icmp -j ACCEPT);
 
@@ -338,8 +355,11 @@ sub generate_rules(%)
             next if ($in eq $out or
                      grep(/^ignore$/, @{$interface{$out}->{'flags'}}));
 
+	    my $label=label($in) . "-" . label($out);
+
 	    comment_block(label($in) . " -> " . label($out));
-	    new_chain(label($in) . "-" . label($out));
+	    insert($label);
+	    new_chain($label);
 	    if ($interface{$in}->{'type'} eq "out" and
 	        $interface{$out}->{'type'} eq "out")
 	    {
@@ -363,6 +383,7 @@ sub generate_rules(%)
 		else
 		{
 		    check_allowed($in, $out);
+		    append($label);
 		    icmpfilter($in, $out);
 		    established($in, $out);
                     reject_auth($in, $out);
@@ -378,6 +399,8 @@ sub generate_rules(%)
 
 	comment_block("Filter traffic from " . label($in) . ".");
 	new_chain(label($in));
+
+	insert(label($in));
 
         # *FIXME* - need to handle aliased interfaces on the same
         # subnet correctly (without adding additional rules)
@@ -398,9 +421,12 @@ sub generate_rules(%)
 		         label($in) . "-" . label($out));
 	    }
 	}
+
+	append(label($in));
     }
 
     comment_block("INPUT chain.");
+    insert("INPUT");
     iptables qw(-A INPUT -j established);
     iptables qw(-A INPUT -i lo -j ACCEPT);
 
@@ -415,6 +441,8 @@ sub generate_rules(%)
 	}
     }
 
+    append("INPUT");
+
     iptables qw(-A INPUT -p tcp --dport 113 -j REJECT --reject-with tcp-reset);
     iptables qw(-A INPUT -p udp --dport 113 -j REJECT),
 	     qw(--reject-with icmp-port-unreachable);
@@ -426,9 +454,13 @@ sub generate_rules(%)
     iptables qw(-A INPUT -j DROP);
 
     comment_block("OUTPUT chain.");
+    insert("OUTPUT");
     iptables qw(-A OUTPUT -j ACCEPT);
+    append("OUTPUT");
 
     comment_block("FORWARD chain.");
+
+    insert("FORWARD");
 
     for my $in (keys(%interface))
     {
@@ -437,12 +469,16 @@ sub generate_rules(%)
 	iptables qw(-A FORWARD -i), $in, "-j", label($in);
     }
 
+    append("FORWARD");
+
     iptables qw(-A FORWARD), @{$conf{'log'}}, "--log-prefix",
              "FORWARD fall-through: "
         if (@{$conf{'log'}});
     iptables qw(-A FORWARD -j DROP);
 
     comment_block "POSTROUTING chain (nat table)";
+
+    insert("nat:POSTROUTING");
 
     for my $in (keys(%interface))
     {
@@ -489,7 +525,11 @@ sub generate_rules(%)
 	}
     }
 
+    append("nat:POSTROUTING");
+
     comment_block "PREROUTING chain (nat table)";
+
+    insert("nat:PREROUTING");
 
     for my $in (keys(%interface))
     {
@@ -519,6 +559,8 @@ sub generate_rules(%)
 	    }
 	}
     }
+
+    append("nat:PREROUTING");
 }
 
 sub icmpfilter($$)
@@ -695,17 +737,22 @@ sub bold($)
 sub comment_block(@)
 {
     print "\n####\n";
+    comment_long(@_);
+}
+
+sub comment_long(@)
+{
+    print "#\n";
     comment(@_);
+    print "#\n";
 }
 
 sub comment(@)
 {
-    print "#\n";
     for my $line (@_)
     {
 	print "# $line\n";
     }
-    print "#\n";
 }
 
 sub begin_script()
@@ -730,7 +777,11 @@ sub iptables(@)
 
     for my $part (@bits)
     {
-	$part=~s/[^\w\-\.\/]/\\$&/g;
+	if ($part=~/[^\w\-\.\/]/)
+	{
+	    $part=~s/'/'\''/g;
+	    $part="'$part'";
+	}
 	push @command, $part;
     }
 
@@ -740,6 +791,43 @@ sub iptables(@)
 sub new_chain($)
 {
     iptables("-N", $_[0]);
+}
+
+sub insert($)
+{
+    action('insert', $_[0]);
+}
+
+sub append($)
+{
+    action('append', $_[0]);
+}
+
+sub action($$)
+{
+    my ($action, $label)=@_;
+    my $table=undef;
+    my $chain;
+
+    if ($label=~/^([^:]+):(.*)$/)
+    {
+	$table=$1;
+	$chain=$2;
+    }
+    else
+    {
+	$chain=$label;
+    }
+
+    if (defined($conf{$action}) and defined($conf{$action}->{$label}))
+    {
+	my @rules=@{$conf{$action}->{$label}};
+	@rules=reverse @rules if ($action eq 'insert');
+        for my $rule (@rules)
+        {
+	    iptables $table ? ("-t", $table) : (), "-A", $chain, @{$rule};
+        }
+    }
 }
 
 __END__
