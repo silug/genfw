@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.15 2002/02/14 05:23:36 steve Exp $
+# $Id: genfw,v 1.16 2002/02/24 09:36:19 steve Exp $
 
 ####
 #
@@ -27,6 +27,7 @@ use strict;
 use FileHandle;
 use DirHandle;
 use Socket;
+use Getopt::Std;
 eval { use Data::Dumper; } if ($ENV{'DEBUG'});
 
 sub reject_auth($$);
@@ -55,9 +56,11 @@ sub insert($);
 sub append($);
 sub action($$);
 
-use vars qw(%interface %conf $config_dir);
+use vars qw(%interface %conf $config_dir %opt);
 
-if (defined($ENV{'DEBUG'}))
+getopts('id', \%opt
+
+if (defined($ENV{'DEBUG'}) || $opt{'d'})
 {
     $config_dir=".";
 }
@@ -736,12 +739,16 @@ sub bold($)
 
 sub comment_block(@)
 {
+    return if ($opt{'i'});
+
     print "\n####\n";
     comment_long(@_);
 }
 
 sub comment_long(@)
 {
+    return if ($opt{'i'});
+
     print "#\n";
     comment(@_);
     print "#\n";
@@ -749,6 +756,8 @@ sub comment_long(@)
 
 sub comment(@)
 {
+    return if ($opt{'i'});
+
     for my $line (@_)
     {
 	print "# $line\n";
@@ -757,6 +766,8 @@ sub comment(@)
 
 sub begin_script()
 {
+    return if ($opt{'i'});
+
     print "#!/bin/sh\n\n";
 }
 
@@ -785,7 +796,16 @@ sub iptables(@)
 	push @command, $part;
     }
 
-    print "@command\n";
+    if ($opt{'i'})
+    {
+        debug "Running '@command' (" . scalar(@command) . " args)...";
+	die "'@command' failed with exit value " . $? >>8
+	    if (system(@command) != 0);
+    }
+    else
+    {
+        print "@command\n";
+    }
 }
 
 sub new_chain($)
