@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.26 2002/07/31 17:56:49 steve Exp $'
+# $Id: genfw,v 1.27 2002/07/31 17:58:10 steve Exp $'
 
 ####
 #
@@ -69,7 +69,7 @@ sub clear_all();
 
 use vars qw($VERSION %interface %conf $config_dir %opt);
 
-( $VERSION ) = '$Revision: 1.26 $ ' =~ /\$Revision:\s+([^\s]+)/;
+( $VERSION ) = '$Revision: 1.27 $ ' =~ /\$Revision:\s+([^\s]+)/;
 
 getopts('id', \%opt);
 
@@ -660,7 +660,7 @@ sub filter_from($$)
     {
         if ($cfg->{$item} eq $cfg->{'ipaddr'})
 	{
-	    comment "Skipping point-to-point address " . $cfg->{'ipaddr'} ".";
+	    comment "Skipping point-to-point address " . $cfg->{'ipaddr'} . ".";
 	    next;
 	}
         my @rule=("-A", label($in), "-d", $cfg->{$item});
@@ -689,7 +689,7 @@ sub filter_to($$$)
     {
         if ($cfg->{$item} eq $cfg->{'ipaddr'})
 	{
-	    comment "Skipping point-to-point address " . $cfg->{'ipaddr'} ".";
+	    comment "Skipping point-to-point address " . $cfg->{'ipaddr'} . ".";
 	    next;
 	}
         my @rule=("-A", label($in) . "-" . label($out), "-d", $cfg->{$item});
