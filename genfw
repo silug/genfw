@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.16 2002/02/24 09:36:19 steve Exp $
+# $Id: genfw,v 1.17 2002/02/24 09:37:15 steve Exp $
 
 ####
 #
@@ -58,7 +58,7 @@ sub action($$);
 
 use vars qw(%interface %conf $config_dir %opt);
 
-getopts('id', \%opt
+getopts('id', \%opt);
 
 if (defined($ENV{'DEBUG'}) || $opt{'d'})
 {
