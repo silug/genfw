@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.30 2003/04/19 05:45:01 steve Exp $'
+# $Id: genfw,v 1.31 2003/12/16 22:28:31 steve Exp $'
 
 ####
 #
@@ -28,7 +28,7 @@
 #               aren't defined in ifcfg-*.
 #     * FIXME - We should be dropping reserved addresses.
 #     * FIXME - We should be dropping traffic to/from port 0.
-#     * FIXME - Users should be able to add arbitrary chains.
+#     * FIXME - Handle quotes in insert and append statements (at least).
 #
 ####
 
@@ -69,7 +69,7 @@ sub clear_all();
 
 use vars qw($VERSION %interface %conf $config_dir %opt);
 
-( $VERSION ) = '$Revision: 1.30 $ ' =~ /\$Revision:\s+([^\s]+)/;
+( $VERSION ) = '$Revision: 1.31 $ ' =~ /\$Revision:\s+([^\s]+)/;
 
 getopts('id', \%opt);
 
@@ -151,6 +151,8 @@ while (<$fh>) {
 	#}
 	$parts[0]=~s/^filter://;
 	push(@{$conf{$parts[0]}->{$parts[1]}}, [@parts[2..$#parts]]);
+    } elsif ($parts[0] eq "chain" and defined($parts[1])) {
+        push(@{$conf{$parts[0]}}, $parts[1]);
     } else {
 	warn "Skipping bogus line ($.):\n\t$_\n";
 	next;
@@ -192,6 +194,14 @@ for my $name (keys(%interface)) {
 }
 
 eval { debug Dumper(\%interface); } if ($ENV{'DEBUG'});
+
+if (defined($conf{'chain'})) {
+    for my $chain (@{$conf{'chain'}}) {
+        new_chain($chain);
+	insert($chain);
+	append($chain);
+    }
+}
 
 generate_rules(%interface);
 
