@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.18 2002/02/24 15:25:14 steve Exp $
+# $Id: genfw,v 1.19 2002/02/25 19:23:20 steve Exp $
 
 ####
 #
@@ -19,6 +19,11 @@
 #
 #     * FIXME - Maximum prefix length 29 for --log-prefix
 #     * FIXME - Chain names have a maximum length (31 characters?) too
+#     * FIXME - We should do something useful with inserted or appended
+#               rules in tables other than filter and nat.
+#     * FIXME - It would probably be good to set the default policy for
+#               chains in other tables (like nat) to DROP and then add
+#               explicit rules for accepting packets.
 #
 ####
 
@@ -64,6 +69,10 @@ getopts('id', \%opt);
 if (defined($ENV{'DEBUG'}) || $opt{'d'})
 {
     $config_dir=".";
+    $|=1;
+    my $oldfh=select(STDERR);
+    $|=1;
+    select($oldfh);
 }
 else
 {
@@ -144,13 +153,14 @@ while (<$fh>)
     elsif ($parts[0]=~/^(append|insert)$/
            and defined($parts[1]) and defined($parts[2]))
     {
-	if ($parts[1]!~
-		/^((filter:)?(INPUT|OUTPUT|FORWARD)|nat:(PRE|POST)ROUTING)$/)
-	{
-	    warn "Ignoring $parts[0] on unknown chain $parts[1] "
-	       . "(rules line $.).\n";
-	    next;
-	}
+	# This is a totally bogus test.
+	#if ($parts[1]!~
+	#	/^((filter:)?(INPUT|OUTPUT|FORWARD)|nat:(PRE|POST)ROUTING)$/)
+	#{
+	#    warn "Ignoring $parts[0] on unknown chain $parts[1] "
+	#       . "(rules line $.).\n";
+	#    next;
+	#}
 	$parts[0]=~s/^filter://;
 	push(@{$conf{$parts[0]}->{$parts[1]}}, [@parts[2..$#parts]]);
     }
@@ -364,8 +374,9 @@ sub generate_rules(%)
 	    my $label=label($in) . "-" . label($out);
 
 	    comment_block(label($in) . " -> " . label($out));
-	    insert($label);
 	    new_chain($label);
+	    debug "insert($label)";
+	    insert($label);
 	    if ($interface{$in}->{'type'} eq "out" and
 	        $interface{$out}->{'type'} eq "out")
 	    {
@@ -384,11 +395,14 @@ sub generate_rules(%)
 		     $interface{$out}->{'type'} eq "out" and
 		     grep /^trusted$/, @{$interface{$in}->{'flags'}}))
 		{
+		    debug "append($label)";
+		    append($label);
 		    &main::accept($in, $out);
 		}
 		else
 		{
 		    check_allowed($in, $out);
+		    debug "append($label)";
 		    append($label);
 		    icmpfilter($in, $out);
 		    established($in, $out);
@@ -406,6 +420,7 @@ sub generate_rules(%)
 	comment_block("Filter traffic from " . label($in) . ".");
 	new_chain(label($in));
 
+	debug "insert(" . label($in) . ")";
 	insert(label($in));
 
         # *FIXME* - need to handle aliased interfaces on the same
@@ -428,10 +443,13 @@ sub generate_rules(%)
 	    }
 	}
 
+	debug "append(" . label($in) . ")";
 	append(label($in));
     }
 
     comment_block("INPUT chain.");
+
+    debug "insert(INPUT)";
     insert("INPUT");
     iptables qw(-A INPUT -j established);
     iptables qw(-A INPUT -i lo -j ACCEPT);
@@ -447,6 +465,7 @@ sub generate_rules(%)
 	}
     }
 
+    debug "append(INPUT)";
     append("INPUT");
 
     iptables qw(-A INPUT -p tcp --dport 113 -j REJECT --reject-with tcp-reset);
@@ -460,12 +479,15 @@ sub generate_rules(%)
     iptables qw(-A INPUT -j DROP);
 
     comment_block("OUTPUT chain.");
+    debug "insert(OUTPUT)";
     insert("OUTPUT");
-    iptables qw(-A OUTPUT -j ACCEPT);
+    debug "append(OUTPUT)";
     append("OUTPUT");
+    iptables qw(-A OUTPUT -j ACCEPT);
 
     comment_block("FORWARD chain.");
 
+    debug "insert(FORWARD)";
     insert("FORWARD");
 
     for my $in (keys(%interface))
@@ -475,6 +497,7 @@ sub generate_rules(%)
 	iptables qw(-A FORWARD -i), $in, "-j", label($in);
     }
 
+    debug "append(FORWARD)";
     append("FORWARD");
 
     iptables qw(-A FORWARD), @{$conf{'log'}}, "--log-prefix",
@@ -484,6 +507,7 @@ sub generate_rules(%)
 
     comment_block "POSTROUTING chain (nat table)";
 
+    debug "insert(nat:POSTROUTING)";
     insert("nat:POSTROUTING");
 
     for my $in (keys(%interface))
@@ -531,10 +555,12 @@ sub generate_rules(%)
 	}
     }
 
+    debug "append(nat:POSTROUTING)";
     append("nat:POSTROUTING");
 
     comment_block "PREROUTING chain (nat table)";
 
+    debug "insert(nat:PREROUTING)";
     insert("nat:PREROUTING");
 
     for my $in (keys(%interface))
@@ -566,6 +592,7 @@ sub generate_rules(%)
 	}
     }
 
+    debug "append(nat:PREROUTING)";
     append("nat:PREROUTING");
 }
 
@@ -843,12 +870,15 @@ sub action($$)
 	$chain=$label;
     }
 
+    debug "$action in $chain" . (defined $table ? ", table '$table'" : "");
+
     if (defined($conf{$action}) and defined($conf{$action}->{$label}))
     {
 	my @rules=@{$conf{$action}->{$label}};
 	@rules=reverse @rules if ($action eq 'insert');
         for my $rule (@rules)
         {
+	    debug "Adding rule '@{$rule}'...";
 	    iptables $table ? ("-t", $table) : (), "-A", $chain, @{$rule};
         }
     }
