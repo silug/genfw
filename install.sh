@@ -15,11 +15,13 @@ install -b -o root -g root genfw $BINDIR/genfw
 install -b -o root -g root firewall.init $INITDIR/firewall
 
 mkdir -p $CONFIGDIR
-for file in rules modules ; do
-    if [ ! -f $CONFIGDIR/$file ] ; then
-        touch $CONFIGDIR/$file
-    fi
-done
+# We don't want to create these.  This way the init script
+# will exit if the package isn't configured properly.
+#for file in rules modules ; do
+#    if [ ! -f $CONFIGDIR/$file ] ; then
+#        touch $CONFIGDIR/$file
+#    fi
+#done
 
 pod2man genfw > genfw.8
 if [ -z "$INSTPREFIX" ] ; then

@@ -12,13 +12,17 @@
 # Source 'em up
 . /etc/init.d/functions
 
-MODULES=/etc/sysconfig/genfw/modules
+modules=/etc/sysconfig/genfw/modules
+
+config=/etc/sysconfig/genfw/rules
+
+[ -f $config ] || exit 0
 
 case "$1" in
   start)
 	action $"Applying firewall rules" genfw -i
-	if [ -f "$MODULES" ] ; then
-	    for module in `cat "$MODULES"` ; do
+	if [ -f "$modules" ] ; then
+	    for module in `cat "$modules"` ; do
 	        action $"Loading firewall module $module" modprobe $module
 	    done
 	fi
