@@ -31,8 +31,8 @@ firewall by using a simple text-based configuration file.
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/etc/rc.d/init.d \
          %{buildroot}/etc/sysconfig/genfw \
-         %{buildroot}/usr/sbin \
-INSTPREFIX=%{buildroot} PREFIX=/usr ./install.sh
+         %{buildroot}/usr/sbin
+INSTPREFIX=%{buildroot} PREFIX=/usr BINDIR=%{buildroot}/usr/sbin ./install.sh
 
 %clean
 rm -rf %{buildroot}
