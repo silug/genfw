@@ -1,5 +1,5 @@
 Name:		genfw
-Version:	1.25
+Version:	1.27
 Release:	1
 Packager:	Steven Pritchard <steve@kspei.com>
 URL:		http://www.kspei.com/projects/genfw/
