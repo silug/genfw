@@ -24,9 +24,10 @@ done
 pod2man genfw > genfw.8
 if [ -z "$INSTPREFIX" ] ; then
     gzip -9 genfw.8
+    install -b -o root -g root genfw.8 $MANDIR/genfw.8
+else
+    install -b -o root -g root genfw.8.gz $MANDIR/genfw.8.gz
 fi
-
-install -b -o root -g root genfw.8.gz $MANDIR/genfw.8.gz
 
 if [ -z "$INSTPREFIX" ] ; then
     chkconfig --add firewall
