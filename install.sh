@@ -1,10 +1,12 @@
 #!/bin/sh
 
-PREFIX=${PREFIX:-""}
-BINDIR=${BINDIR:-"$PREFIX/usr/local/bin"}
-MANDIR=${MANDIR:-"$PREFIX/usr/local/share/man/man8"}
-INITDIR=${INITDIR:-"$PREFIX/etc/rc.d/init.d"}
-CONFIGDIR=${CONFIGDIR:-"$PREFIX/etc/sysconfig/genfw"}
+INSTPREFIX=${INSTPREFIX:-""}
+PREFIX=${PREFIX:-"$INSTPREFIX/usr/local"}
+BINDIR=${BINDIR:-"$PREFIX/bin"}
+MANDIR=${MANDIR:-"$PREFIX/share/man"}
+MAN8DIR=${MAN8DIR:-"$MANDIR/man8"}
+INITDIR=${INITDIR:-"$INSTPREFIX/etc/rc.d/init.d"}
+CONFIGDIR=${CONFIGDIR:-"$INSTPREFIX/etc/sysconfig/genfw"}
 
 set -e
 set -x
@@ -20,8 +22,12 @@ for file in rules modules ; do
 done
 
 pod2man genfw > genfw.8
-gzip -9 genfw.8
+if [ -z "$INSTPREFIX" ] ; then
+    gzip -9 genfw.8
+fi
 
 install -b -o root -g root genfw.8.gz $MANDIR/genfw.8.gz
 
-chkconfig --add firewall
+if [ -z "$INSTPREFIX" ] ; then
+    chkconfig --add firewall
+fi
