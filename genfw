@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.28 2003/04/15 03:18:44 steve Exp $'
+# $Id: genfw,v 1.29 2003/04/15 03:52:40 steve Exp $'
 
 ####
 #
@@ -69,7 +69,7 @@ sub clear_all();
 
 use vars qw($VERSION %interface %conf $config_dir %opt);
 
-( $VERSION ) = '$Revision: 1.28 $ ' =~ /\$Revision:\s+([^\s]+)/;
+( $VERSION ) = '$Revision: 1.29 $ ' =~ /\$Revision:\s+([^\s]+)/;
 
 getopts('id', \%opt);
 
@@ -556,10 +556,19 @@ sub generate_rules(%)
 		{
                     # *FIXME* - need to handle aliased interfaces on the same
                     # subnet correctly (without adding additional rules)
-		    iptables qw(-t nat -A POSTROUTING -o), $out, "-s",
-		             $cfg->{'network'} . "/" . $cfg->{'netmask'},
-                             qw(-j SNAT --to),
-		             $interface{$out}->{'cfg'}->[0]->{'ipaddr'};
+                    # *FIXME* - This also isn't going to work if the *inside*
+                    # interface is dynamically assigned, although that just
+                    # wouldn't usually make a hell of a lot of sense...
+                    if (defined($interface{$out}->{'cfg'}->[0]->{'ipaddr'})) {
+		        iptables qw(-t nat -A POSTROUTING -o), $out, "-s",
+		                 $cfg->{'network'} . "/" . $cfg->{'netmask'},
+                                 qw(-j SNAT --to),
+		                 $interface{$out}->{'cfg'}->[0]->{'ipaddr'};
+                    } else {
+		        iptables qw(-t nat -A POSTROUTING -o), $out, "-s",
+		                 $cfg->{'network'} . "/" . $cfg->{'netmask'},
+                                 qw(-j MASQUERADE);
+                    }
 		}
 	    }
 	}
