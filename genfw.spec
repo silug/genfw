@@ -1,7 +1,6 @@
 Name:		genfw
 Version:	%(perl -MExtUtils::MakeMaker -le 'print ExtUtils::MM_Unix::parse_version("", "genfw")')
 Release:	1
-Packager:	Steven Pritchard <steve@kspei.com>
 URL:		http://www.kspei.com/projects/genfw/
 Source0:	http://ftp.kspei.com/pub/steve/genfw/%{name}-%{version}.tar.gz
 Group:		System Environment/Base
@@ -45,7 +44,9 @@ cp genfw.8 %{buildroot}/%{_mandir}/man8/genfw.8
 rm -rf %{buildroot}
 
 %preun
-chkconfig --del firewall
+if [ "$1" = 0 ]; then
+    chkconfig --del firewall
+fi
 
 %post
 chkconfig --add firewall
