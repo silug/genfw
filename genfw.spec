@@ -39,7 +39,7 @@ cp genfw %{buildroot}/%{_sbindir}/genfw
 cp firewall.init %{buildroot}/%{_initrddir}/firewall
 
 pod2man genfw > genfw.8
-cp genfw.8 %{buildroot}/%{_mandir}/genfw.8
+cp genfw.8 %{buildroot}/%{_mandir}/man8/genfw.8
 
 %clean
 rm -rf %{buildroot}
@@ -52,9 +52,9 @@ chkconfig --add firewall
 
 %files
 %defattr(-,root,root)
-%dir /etc/sysconfig/genfw
-%config /etc/rc.d/init.d/firewall
-/usr/sbin/genfw
+%dir %{_sysconfdir}/sysconfig/genfw
+%config %{_initrddir}/firewall
+%{_sbindir}/genfw
 %{_mandir}/man8/genfw.8*
 
 %changelog
