@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.33 2003/12/16 22:45:13 steve Exp $'
+# $Id: genfw,v 1.34 2003/12/16 23:05:42 steve Exp $'
 
 ####
 #
@@ -69,7 +69,7 @@ sub clear_all();
 
 use vars qw($VERSION %interface %conf $config_dir %opt);
 
-( $VERSION ) = '$Revision: 1.33 $ ' =~ /\$Revision:\s+([^\s]+)/;
+( $VERSION ) = '$Revision: 1.34 $ ' =~ /\$Revision:\s+([^\s]+)/;
 
 getopts('id', \%opt);
 
@@ -899,6 +899,15 @@ For example, the following would redirect outgoing connections on port 80
 to port 3128 (for transparent proxying with squid):
 
  append nat:PREROUTING -i eth0 -p tcp --dport 80 -j REDIRECT --to 3128
+
+=item C<insert> [I<table>:]I<chain> I<rule>
+
+This inserts I<rule> at the beginning of I<chain> in a specified I<table>.
+See L</append> above.
+
+=item C<chain> I<name> [I<comment>]
+
+This creates a chain named I<name> (for use with C<append> and C<insert>).
 
 =item C<no logging>
 
