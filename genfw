@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.14 2002/01/31 14:44:21 steve Exp $
+# $Id: genfw,v 1.15 2002/02/14 05:23:36 steve Exp $
 
 ####
 #
@@ -883,6 +883,16 @@ Equivalent to C<outside>.
 =item C<out> I<interface>
 
 Equivalent to C<outside>.
+
+=item C<append> [I<table>:]I<chain> I<rule>
+
+This appends I<rule> to a I<chain> in a specified I<table>.  If I<table>
+(and the colon (:) after it) is omitted, the filter table is assumed.
+
+For example, the following would redirect outgoing connections on port 80
+to port 3128 (for transparent proxying with squid):
+
+ append nat:PREROUTING -i eth0 -p tcp --dport 80 -j REDIRECT --to 3128
 
 =item C<no logging>
 
