@@ -1,0 +1,905 @@
+#!/usr/bin/perl -w
+#
+# genfw - Generate a firewall script from some rules
+#         and a Red Hat box's network configuration
+#
+# Copyright (C) 2001 Steven Pritchard <steve@silug.org>
+# This program is free software; you can redistribute it
+# and/or modify it under the same terms as Perl itself.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+# $Id: genfw,v 1.13 2002/01/31 12:52:37 steve Exp $
+
+####
+#
+# TODO:
+#
+#     * FIXME - Maximum prefix length 29 for --log-prefix
+#     * FIXME - Chain names have a maximum length (31 characters?) too
+#
+####
+
+use strict;
+
+use FileHandle;
+use DirHandle;
+use Socket;
+eval { use Data::Dumper; } if ($ENV{'DEBUG'});
+
+sub reject_auth($$);
+sub check_allowed($$);
+sub allow($$@);
+sub label($);
+sub icmpfilter($$);
+sub established($$);
+sub drop($$);
+sub accept($$);
+sub filter_from($$);
+sub filter_to($$$);
+sub generate_rules(%);
+sub parseconfig($$);
+sub debug(@);
+sub bold($);
+sub generate_rules(%);
+sub comment_block(@);
+sub comment(@);
+sub begin_script();
+sub set_policy($$$);
+sub iptables(@);
+sub new_chain($);
+
+use vars qw(%interface %conf $config_dir);
+
+if (defined($ENV{'DEBUG'}))
+{
+    $config_dir=".";
+}
+else
+{
+    $config_dir="/etc/sysconfig";
+}
+
+# Default
+$conf{'log'}=[qw(-m limit -j LOG)];
+
+my $fh=new FileHandle "<$config_dir/rules"
+    or die "Couldn't open $config_dir/rules: $!\n";
+
+# *FIXME* - need to handle when the last line ends in '\'
+my $last;
+while (<$fh>)
+{
+    chomp;
+    s/(?<!\\)#.*$//; # Strip comments ("\" escapes "#") *FIXME* - we never strip them
+    $_=$last.$_ if ($last);
+    if (s/\\$//)
+    {
+        $last=$_;
+	next;
+    }
+    else
+    {
+        $last="";
+    }
+    next if (/^\s*$/); # Skip blank lines
+
+    debug "$_";
+    my @parts=split;
+    if ($parts[0]=~/^(dmz)$/ or
+        $parts[0]=~/^(int)(?:ernal)?$/ or
+        $parts[0]=~/^(out)(?:put|side)?$/)
+    {
+        my $type=$1;
+        shift @parts;
+        my $name=shift(@parts);
+        if (!$name)
+        {
+            warn "No interface defined:\n\t$_\nSkipping...\n";
+            next;
+        }
+        debug "Interface $name, type $type found.";
+        if (defined($interface{$name}))
+        {
+            warn "Skipping duplicate definition for interface $name:\n\t$_\n";
+            next;
+        }
+        $interface{$name}={'type' => $type};
+        if (@parts)
+        {
+            $interface{$name}->{'flags'}=[@parts];
+            debug "interface $name flags \"@{$interface{$name}->{'flags'}}\"";
+        }
+    }
+    elsif (defined($parts[1]) and ($parts[1] eq "logging"))
+    {
+	if ($parts[0] eq "no")
+	{
+	    $conf{'log'}=[];
+	}
+	elsif ($parts[0] eq "limit")
+	{
+	    $conf{'log'}=[qw(-m limit -j LOG)];
+	}
+	elsif ($parts[0] eq "full")
+	{
+	    $conf{'log'}=[qw(-j LOG)];
+	}
+	else
+	{
+	    warn "I don't know what you mean by '@parts[0,1]' (line $.).\n";
+	    next;
+	}
+    }
+    else
+    {
+	warn "Skipping bogus line ($.):\n\t$_\n";
+	next;
+    }
+    debug;
+}
+
+for my $name (keys(%interface))
+{
+    if (grep(/^ignore$/, @{$interface{$name}->{'flags'}}))
+    {
+        debug "Skipping interface $name";
+        debug;
+        next;
+    }
+
+    my $dir=new DirHandle "$config_dir/network-scripts"
+        or die "Failed to open $config_dir/network-scripts: $!\n";
+    my @configs=("$config_dir/network-scripts/ifcfg-$name");
+    for my $file (grep(/^ifcfg-$name:\d+$/, $dir->read))
+    {
+	push(@configs, "$config_dir/network-scripts/$file");
+    }
+    for my $configfile (@configs)
+    {
+	debug "configfile: $configfile";
+
+        my %cfg=parseconfig($configfile, $name);
+	next if (!%cfg);
+
+        push(@{$interface{$name}->{'cfg'}}, \%cfg);
+        for my $cfg (@{$interface{$name}->{'cfg'}})
+        {
+            debug "interface $name";
+	    debug "  address " . $cfg->{'ipaddr'};
+            debug "  netmask " . $cfg->{'netmask'};
+	    debug "  network " . $cfg->{'network'};
+	    debug "  broadcast " . $cfg->{'broadcast'};
+        }
+    }
+    debug;
+}
+
+eval { debug Dumper(\%interface); } if ($ENV{'DEBUG'});
+
+generate_rules(%interface);
+
+####
+#
+# Subs
+#
+
+sub reject_auth($$)
+{
+    my ($in, $out)=@_;
+
+    iptables "-A", label($in) . "-" . label($out),
+           qw(-p tcp --dport 113 -j REJECT --reject-with tcp-reset);
+    iptables "-A", label($in) . "-" . label($out),
+           qw(-p udp --dport 113 -j REJECT --reject-with icmp-port-unreachable);
+}
+
+sub check_allowed($$)
+{
+    my ($in, $out)=@_;
+
+    debug "checking for allowed traffic to interface $out";
+    my @allow=grep /^allow=/,
+                   @{$interface{$out}->{'flags'}};
+
+    if (@allow)
+    {
+        my @open_port;
+
+        for my $item (@allow)
+        {
+            debug "parsing '$item'";
+            $item=~s/^allow=//;
+            next if (!$item);
+            for my $ports (split /,/, $item)
+            {
+		# *FIXME* - probably should verify that source
+		# & destination are valid-looking addresses
+	        my ($port, $proto, $from, $to, $interface)=
+                    $ports=~/^(.*?)           # port (or protocol)
+		              (?:\/(.*?))?    # protocol (can be omitted)
+			      (?::(.*?))?     # source address (ditto)
+			      (?::(.*?))?     # destination address (ditto)
+			      (?::(.*?))?     # source interface
+			     $/x;
+		next if ($interface and $interface ne $in);
+		if (!$proto)
+		{
+		    if ($port=~/^\d+$/)
+		    {
+			warn "ambiguous allow '$port', ignoring...\n";
+			next;
+		    }
+		    my $found=0;
+		    for $proto ("tcp", "udp")
+		    {
+		        if (getservbyname($port, $proto))
+		        {
+			    push(@open_port, [$port, $proto, $from, $to]);
+			    $found++;
+		        }
+		    }
+		    if (!$found)
+		    {
+			if (getprotobyname($port))
+			{
+			    push(@open_port, [undef, $port, $from, $to]);
+			}
+			else
+			{
+			    warn "ambiguous allow '$port', ignoring...\n";
+			    next;
+			}
+		    }
+		}
+		else
+		{
+                    if ($port!~/^\d+$/ and !getservbyname($port, $proto))
+		    {
+		        warn "invalid port/proto '$port/$proto', ignoring...\n";
+			next;
+		    }
+
+	            push(@open_port, [$port, $proto, $from, $to]);
+		}
+            }
+        }
+
+        for my $port (@open_port)
+        {
+            debug "allowing proto ", $port->[1],
+                  defined($port->[0]) ?
+                      ", port " . $port->[0] : "",
+                  defined($port->[2]) ?
+                      ", from " . $port->[2] : "",
+                  defined($port->[3]) ?
+                      ", to " . $port->[3] : "";
+            allow($in, $out, @{$port});
+        }
+    }
+}
+
+sub allow($$@)
+{
+    my ($in, $out, $port, $proto, $from, $to)=@_;
+
+    iptables "-A", label($in) . "-" . label($out),
+             "-p", $proto, $port ? ("--dport", $port) : (),
+             $from ? ("-s", $from) : (), $to ? ("-d", $to) : (),
+	     qw(-j ACCEPT);
+}
+
+sub label($)
+{
+    my ($name)=@_;
+
+    if (my ($label)=grep /^label=/, @{$interface{$name}->{'flags'}})
+    {
+	$label=~s/^label=(.*)$/$1/;
+	if ($label)
+	{
+	    return $label;
+	}
+	else
+	{
+	    return $name;
+	}
+    }
+    else
+    {
+	return $name;
+    }
+}
+
+sub generate_rules(%)
+{
+    my %interface=@_;
+
+    begin_script;
+    comment("Set default policy to DROP.");
+    set_policy("DROP", "DROP", "DROP");
+    comment_block("User-defined chains.");
+    comment("Allow established connections.");
+    new_chain("established");
+    iptables qw(-A established -m state --state), "ESTABLISHED,RELATED",
+	     qw(-j ACCEPT);
+    comment("Filter ICMP traffic.");
+    new_chain("icmp-filter");
+    iptables qw(-A icmp-filter -p icmp -j ACCEPT);
+
+    for my $in (keys(%interface))
+    {
+        next if (grep(/^ignore$/, @{$interface{$in}->{'flags'}}));
+
+	for my $out (keys(%interface))
+	{
+            next if ($in eq $out or
+                     grep(/^ignore$/, @{$interface{$out}->{'flags'}}));
+
+	    comment_block(label($in) . " -> " . label($out));
+	    new_chain(label($in) . "-" . label($out));
+	    if ($interface{$in}->{'type'} eq "out" and
+	        $interface{$out}->{'type'} eq "out")
+	    {
+	        drop($in, $out);
+	    }
+	    else
+	    {
+	        # Filter traffic to the network address.
+		filter_to($in, $out, "network");
+		# Filter traffic to the broadcast address.
+		filter_to($in, $out, "broadcast");
+
+                if (($interface{$in}->{'type'} eq "int" and
+		     grep /^trusted$/, @{$interface{$in}->{'flags'}}) or
+		    ($interface{$in}->{'type'} eq "dmz" and
+		     $interface{$out}->{'type'} eq "out" and
+		     grep /^trusted$/, @{$interface{$in}->{'flags'}}))
+		{
+		    &main::accept($in, $out);
+		}
+		else
+		{
+		    check_allowed($in, $out);
+		    icmpfilter($in, $out);
+		    established($in, $out);
+                    reject_auth($in, $out);
+		    drop($in, $out);
+		}
+	    }
+	}
+    }
+
+    for my $in (keys(%interface))
+    {
+        next if (grep(/^ignore$/, @{$interface{$in}->{'flags'}}));
+
+	comment_block("Filter traffic from " . label($in) . ".");
+	new_chain(label($in));
+
+        # *FIXME* - need to handle aliased interfaces on the same
+        # subnet correctly (without adding additional rules)
+	filter_from($in, "network");
+	filter_from($in, "broadcast");
+
+	for my $out (keys(%interface))
+	{
+            next if (grep(/^ignore$/, @{$interface{$out}->{'flags'}}));
+
+	    if ($in eq $out)
+	    {
+	        iptables("-A", label($in), "-o", $out, "-j", "ACCEPT");
+	    }
+	    else
+	    {
+                iptables("-A", label($in), "-o", $out, "-j",
+		         label($in) . "-" . label($out));
+	    }
+	}
+    }
+
+    comment_block("INPUT chain.");
+    iptables qw(-A INPUT -j established);
+    iptables qw(-A INPUT -i lo -j ACCEPT);
+
+    for my $iface (keys(%interface))
+    {
+	next if (grep /^ignore$/, @{$interface{$iface}->{'flags'}});
+
+	if (($interface{$iface}->{'type'} eq "int") &&
+	    grep /^trusted$/, @{$interface{$iface}->{'flags'}})
+	{
+	    iptables("-A", "INPUT", "-i", $iface, "-j", "ACCEPT");
+	}
+    }
+
+    iptables qw(-A INPUT -p tcp --dport 113 -j REJECT --reject-with tcp-reset);
+    iptables qw(-A INPUT -p udp --dport 113 -j REJECT),
+	     qw(--reject-with icmp-port-unreachable);
+    iptables qw(-A INPUT -j icmp-filter);
+
+    iptables qw(-A INPUT), @{$conf{'log'}}, "--log-prefix",
+             "INPUT fall-through: "
+        if (@{$conf{'log'}});
+    iptables qw(-A INPUT -j DROP);
+
+    comment_block("OUTPUT chain.");
+    iptables qw(-A OUTPUT -j ACCEPT);
+
+    comment_block("FORWARD chain.");
+
+    for my $in (keys(%interface))
+    {
+        next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
+
+	iptables qw(-A FORWARD -i), $in, "-j", label($in);
+    }
+
+    iptables qw(-A FORWARD), @{$conf{'log'}}, "--log-prefix",
+             "FORWARD fall-through: "
+        if (@{$conf{'log'}});
+    iptables qw(-A FORWARD -j DROP);
+
+    comment_block "POSTROUTING chain (nat table)";
+
+    for my $in (keys(%interface))
+    {
+        next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
+
+        debug "checking interface $in";
+	if (grep /^nat$/, @{$interface{$in}->{'flags'}})
+	{
+	    debug "need to nat interface $in";
+	    for my $out (keys(%interface))
+	    {
+		next if ($in eq $out or
+		         $interface{$out}->{'type'} ne "out" or
+		         grep /^ignore$/, @{$interface{$out}->{'flags'}});
+
+		debug "found interface $out to nat out";
+
+		for my $iface ($in, $out)
+		{
+                    if (!defined($interface{$iface}->{'cfg'})
+                        or !@{$interface{$iface}->{'cfg'}})
+                    {
+	                warn "I have no configuration for interface $iface!\n";
+	                return;
+                    }
+		}
+
+		if (@{$interface{$out}->{'cfg'}}>1)
+		{
+		    warn "interface $out has multiple configurations, " .
+			 "using first address found.\n";
+		}
+
+		for my $cfg (@{$interface{$in}->{'cfg'}})
+		{
+                    # *FIXME* - need to handle aliased interfaces on the same
+                    # subnet correctly (without adding additional rules)
+		    iptables qw(-t nat -A POSTROUTING -o), $out, "-s",
+		             $cfg->{'network'} . "/" . $cfg->{'netmask'},
+                             qw(-j SNAT --to),
+		             $interface{$out}->{'cfg'}->[0]->{'ipaddr'};
+		}
+	    }
+	}
+    }
+
+    comment_block "PREROUTING chain (nat table)";
+
+    for my $in (keys(%interface))
+    {
+        debug "PREROUTING: checking $in...";
+        next if ($interface{$in}->{'type'} ne "out" or
+	         grep /^ignore$/, @{$interface{$in}->{'flags'}});
+
+	for my $out (keys(%interface))
+	{
+            debug "PREROUTING:   checking $out -> $in...";
+	    next if ($in eq $out or $interface{$out}->{'type'} eq "out" or
+		     grep /^ignore$/, @{$interface{$out}->{'flags'}} or
+	             !grep /^nat$/, @{$interface{$out}->{'flags'}});
+
+	    debug "filtering traffic to $out from $in...";
+
+	    for my $cfg (@{$interface{$out}->{'cfg'}})
+	    {
+                # *FIXME* - need to handle aliased interfaces on the same
+                # subnet correctly (without adding additional rules)
+		my @rule=(qw(-t nat -A PREROUTING -i), $in, "-d",
+		          $cfg->{'network'} . "/" . $cfg->{'netmask'});
+	        iptables @rule, @{$conf{'log'}}, "--log-prefix",
+	                 label($in) . " -> " . label($out) . " - bad dest: "
+	            if (@{$conf{'log'}});
+	        iptables @rule, qw(-j DROP);
+	    }
+	}
+    }
+}
+
+sub icmpfilter($$)
+{
+    my ($in, $out)=@_;
+
+    iptables "-A", label($in) . "-" . label($out), qw(-j icmp-filter);
+}
+
+sub established($$)
+{
+    my ($in, $out)=@_;
+
+    iptables "-A", label($in) . "-" . label($out), qw(-j established);
+}
+
+sub drop($$)
+{
+    my ($in, $out)=@_;
+
+    iptables "-A", label($in) . "-" . label($out), @{$conf{'log'}},
+          "--log-prefix", label($in) . " -> " . label($out) . ": "
+        if (@{$conf{'log'}});
+    iptables "-A", label($in) . "-" . label($out), qw(-j DROP);
+}
+
+sub accept($$)
+{
+    my ($in, $out)=@_;
+
+    iptables "-A", label($in) . "-" . label($out), qw(-j ACCEPT);
+}
+
+sub filter_from($$)
+{
+    my ($in, $item)=@_;
+
+    debug "$in, filtering from $item";
+
+    if (!defined($interface{$in}->{'cfg'}) or !@{$interface{$in}->{'cfg'}})
+    {
+	warn "I have no configuration for interface $in!\n";
+	return;
+    }
+
+    comment "Filter traffic from the $item address(es).";
+
+    for my $cfg (@{$interface{$in}->{'cfg'}})
+    {
+        my @rule=("-A", label($in), "-d", $cfg->{$item});
+	iptables @rule, @{$conf{'log'}}, "--log-prefix",
+	         label($in) . " - from $item: "
+	    if (@{$conf{'log'}});
+	iptables @rule, qw(-j DROP);
+    }
+}
+
+sub filter_to($$$)
+{
+    my ($in, $out, $item)=@_;
+
+    debug "$in -> $out, filtering to $item";
+
+    if (!defined($interface{$out}->{'cfg'}) or !@{$interface{$out}->{'cfg'}})
+    {
+	warn "I have no configuration for interface $out!\n";
+	return;
+    }
+
+    comment "Filter traffic to the $item address(es).";
+
+    for my $cfg (@{$interface{$out}->{'cfg'}})
+    {
+        my @rule=("-A", label($in) . "-" . label($out), "-d", $cfg->{$item});
+	iptables @rule, @{$conf{'log'}}, "--log-prefix",
+	         label($in) . "-" . label($out) . " - to $item: "
+	    if (@{$conf{'log'}});
+	iptables @rule, qw(-j DROP);
+    }
+}
+
+sub parseconfig($$)
+{
+    my ($configfile, $name)=@_;
+    my %cfg;
+
+    if (my $config=new FileHandle "<$configfile")
+    {
+        while (<$config>)
+        {
+            chomp;
+            s/(?<!\\)#.*$//; # Strip comments ("\" escapes "#") *FIXME* - we never strip them
+            next if (/^\s*$/); # Skip blank lines
+
+            debug $_;
+            if (/^\s*(\S+)\s*=\s*"?(\S+?)"?\s*$/)
+            {
+                my ($var, $value)=($1, $2);
+
+                if ($var eq "DEVICE")
+                {
+                    warn "$configfile says DEVICE is $value not $name!\n"
+                        if ($value!~/^$name(?::\d+)?$/);
+                }
+                elsif ($var=~/^(?:IPADDR|NETMASK|NETWORK|BROADCAST)$/)
+                {
+                    warn "$name " . lc($var)
+                       . " redefined, $configfile line $.\n"
+                        if (defined($cfg{lc($var)}));
+                    $cfg{lc($var)}=$value;
+                }
+                else
+                {
+                    debug "Skipping uninteresting variable $var...";
+                }
+            }
+            else
+            {
+                warn "Skipping strange configuration line:\n\t$_\n"
+                   . "$configfile line $.\n";
+                next;
+            }
+        }
+    }
+    else
+    {
+        warn "Couldn't open $configfile: $!\n";
+    }
+
+    my $network=inet_ntoa(inet_aton($cfg{'ipaddr'})
+                          & inet_aton($cfg{'netmask'}));
+    my $broadcast=inet_ntoa(inet_aton($cfg{'ipaddr'})
+                            | (~ inet_aton($cfg{'netmask'})));
+
+    debug "Calculated network $network, broadcast $broadcast";
+
+    if ($network ne $cfg{'network'})
+    {
+	warn "$configfile has incorrect network address $cfg{'network'}\n"
+	    if ($cfg{'network'});
+	$cfg{'network'}=$network;
+    }
+
+    if ($broadcast ne $cfg{'broadcast'})
+    {
+	warn "$configfile has incorrect broadcast address $cfg{'broadcast'}\n"
+	    if ($cfg{'broadcast'});
+	$cfg{'broadcast'}=$broadcast;
+    }
+
+    return %cfg;
+}
+
+sub debug(@)
+{
+    return if (!defined($ENV{'DEBUG'}));
+    if (!@_)
+    {
+        print STDERR "\n";
+    }
+    else
+    {
+        #print STDERR "\033[37;1md:\033[0m ", @_, "\n";
+        print STDERR bold("d: "), @_, "\n";
+    }
+}
+
+sub bold($)
+{
+    return @_ if (!-t STDERR);
+    return "\033[37;1m" . $_[0] . "\033[0m";
+}
+
+sub comment_block(@)
+{
+    print "\n####\n";
+    comment(@_);
+}
+
+sub comment(@)
+{
+    print "#\n";
+    for my $line (@_)
+    {
+	print "# $line\n";
+    }
+    print "#\n";
+}
+
+sub begin_script()
+{
+    print "#!/bin/sh\n\n";
+}
+
+sub set_policy($$$)
+{
+    my @chain=("INPUT", "OUTPUT", "FORWARD");
+
+    for (my $n=0;$n<3;$n++)
+    {
+	iptables("-P", $chain[$n], $_[$n]);
+    }
+}
+
+sub iptables(@)
+{
+    my @command=("iptables");
+    my @bits=@_;
+
+    for my $part (@bits)
+    {
+	$part=~s/[^\w\-\.\/]/\\$&/g;
+	push @command, $part;
+    }
+
+    print "@command\n";
+}
+
+sub new_chain($)
+{
+    iptables("-N", $_[0]);
+}
+
+__END__
+
+=head1 NAME
+
+genfw - Generate a firewall script
+
+=head1 SYNOPSIS
+
+B<genfw>
+
+=head1 DESCRIPTION
+
+This script generates a firewall script based on a F<rules> file and the
+network configuration of a system.
+
+=head1 OPTIONS
+
+The F<rules> file should contain one line for each interface on the system.
+Like most standard Unix configuration files, C<\> is used to continue lines
+and C<#> is used to begin comments.
+
+=head2 Directives
+
+=over 4
+
+=item C<internal> I<interface>
+
+An "internal" interface tends to be able to connect out, but nothing can
+connect in to it.
+
+=item C<int> I<interface>
+
+Equivalent to C<internal>.
+
+=item C<dmz> I<interface>
+
+A "dmz" interface tends allow connections from the outside world, but can't
+connect to "internal" interfaces, and can sometimes connect out to the
+world.
+
+=item C<outside> I<interface>
+
+An "outside" interface usually can't connect to "internal" interfaces but
+can connect to some things on "dmz" interfaces.  Also, traffic is not
+allowed between "outside" interfaces.
+
+=item C<output> I<interface>
+
+Equivalent to C<outside>.
+
+=item C<out> I<interface>
+
+Equivalent to C<outside>.
+
+=item C<no logging>
+
+Modifies generated rules so that dropped packets are not logged.
+
+=item C<limit logging>
+
+Dropped packets are logged, but rate-limited.  This adds C<-m limit> to all
+C<-j LOG> lines.  This is the default.
+
+=item C<full logging>
+
+Modifies generated rules so that all dropped packets are logged.
+
+=back
+
+=head2 Flags
+
+Any of the interface definition lines can include any number of the
+following whitespace-separated options:
+
+=over 4
+
+=item C<ignore>
+
+Don't generate rules for this interface.
+
+=item C<allow=>I<port>C</>I<proto>[C<:>I<src>[C<:>I<dest>[C<:>I<interface>]]]>[C<,>...]
+
+Allow specific traffic to this interface.  This option can take many
+including any of the following:
+
+=over 8
+
+=item C<allow=>I<port>
+
+Checks for I<port>/tcp and I<port>/udp in F</etc/services>.  Rules are
+generated for each one that is defined.  An example might be
+C<allow=domain> to allow traffic to UDP or TCP port 53.
+
+=item C<allow=>I<protocol>
+
+Checks for I<protocol> in F</etc/protocols>.  A rule is generated if the
+protocol is defined.  For example, C<allow=gre>.
+
+=item C<allow=>I<port>C</>I<protocol>
+
+Allows traffic to the specified I<port> on the specified I<protocol>.
+I<port> can be numeric.  (I<protocol> may also be numeric, although this is
+untested at the moment.)  Examples might be C<allow=smtp/tcp> or
+C<allow=25/tcp>.  Both are equivalent.
+
+=back
+
+Any number of protocols, ports, etc. can be included after an C<allow=> in
+a comma-separated list.
+
+Any of the above can also be followed by a colon-separated list including
+the source address, destination address, and source interface.  Any of the
+three can be left blank.
+
+For example, C<allow=ssh/tcp:::eth0> would allow ssh access from eth0, but
+nowhere else.
+
+=item C<label=>I<label>
+
+Use I<label> in the names of chains, log messages, etc. instead of the
+interface name.
+
+=item C<trusted>
+
+Only used for "dmz" and "internal" interfaces.  Any "trusted" interface is
+allowed full outgoing network access.  Also, "internal" networks that are
+"trusted" can connect to anything on a "dmz" network.
+
+=item C<nat>
+
+Do Network Address Translation on packets going out from this interface.
+This only applies to traffic from an "internal" or "dmz" interface to an
+"outside" interface.
+
+=back
+
+=head1 FILES
+
+F</etc/sysconfig/rules>	The rules used to generate the firewall script.
+
+F</etc/sysconfig/network-scripts/ifcfg-*> The network configuration.
+
+=head1 NOTES
+
+A good firewall should restrict traffic on a per-interface basis as much as
+possible.  This script tends to encourage this behavior...
+
+=head1 BUGS
+
+Currently this script only knows how to read the configuration from a Red
+Hat system.
+
+=head1 AUTHOR
+
+Steven Pritchard E<lt>F<steve@silug.org>E<gt>
+
+=head1 SEE ALSO
+
+L<iptables(8)>, L<services(5)>, L<protocols(5)>
+
+=cut
