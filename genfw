@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.31 2003/12/16 22:28:31 steve Exp $'
+# $Id: genfw,v 1.32 2003/12/16 22:35:16 steve Exp $'
 
 ####
 #
@@ -69,7 +69,7 @@ sub clear_all();
 
 use vars qw($VERSION %interface %conf $config_dir %opt);
 
-( $VERSION ) = '$Revision: 1.31 $ ' =~ /\$Revision:\s+([^\s]+)/;
+( $VERSION ) = '$Revision: 1.32 $ ' =~ /\$Revision:\s+([^\s]+)/;
 
 getopts('id', \%opt);
 
@@ -194,14 +194,6 @@ for my $name (keys(%interface)) {
 }
 
 eval { debug Dumper(\%interface); } if ($ENV{'DEBUG'});
-
-if (defined($conf{'chain'})) {
-    for my $chain (@{$conf{'chain'}}) {
-        new_chain($chain);
-	insert($chain);
-	append($chain);
-    }
-}
 
 generate_rules(%interface);
 
@@ -329,6 +321,14 @@ sub generate_rules(%) {
     comment_long "Filter ICMP traffic.";
     new_chain("icmp-filter");
     iptables qw(-A icmp-filter -p icmp -j ACCEPT);
+
+    if (defined($conf{'chain'})) {
+        for my $chain (@{$conf{'chain'}}) {
+            new_chain($chain);
+	    insert($chain);
+	    append($chain);
+        }
+    }
 
     for my $in (keys(%interface)) {
         next if (grep(/^ignore$/, @{$interface{$in}->{'flags'}}));
