@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.35 2004/01/18 23:19:49 steve Exp $'
+# $Id: genfw,v 1.36 2005/08/08 18:01:03 steve Exp $'
 
 ####
 #
@@ -29,6 +29,16 @@
 #     * FIXME - We should be dropping reserved addresses.
 #     * FIXME - We should be dropping traffic to/from port 0.
 #     * FIXME - Handle quotes in insert and append statements (at least).
+#     * FIXME - The "nat" handling could use some extensions:
+#               * SNAT from a specific address (other than the default)
+#               * DNAT (from the outside address or a random address)
+#     * FIXME - "allow" should handle source ports.
+#     * FIXME - "allow" should handle ranges of ports.
+#     * FIXME - There should be an option to specify where to find the
+#               configuration files.
+#     * FIXME - I'd like to see this work on Debian (at least).
+#     * FIXME - "append" and "insert" to non-existent chains should give
+#               an error
 #
 ####
 
@@ -69,7 +79,7 @@ sub clear_all();
 
 use vars qw($VERSION %interface %conf $config_dir %opt);
 
-( $VERSION ) = '$Revision: 1.35 $ ' =~ /\$Revision:\s+([^\s]+)/;
+( $VERSION ) = '$Revision: 1.36 $ ' =~ /\$Revision:\s+([^\s]+)/;
 
 getopts('id', \%opt);
 
