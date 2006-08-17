@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.36 2005/08/08 18:01:03 steve Exp $'
+# $Id: genfw,v 1.37 2006/08/17 15:03:49 steve Exp $'
 
 ####
 #
@@ -79,7 +79,7 @@ sub clear_all();
 
 use vars qw($VERSION %interface %conf $config_dir %opt);
 
-( $VERSION ) = '$Revision: 1.36 $ ' =~ /\$Revision:\s+([^\s]+)/;
+( $VERSION ) = '$Revision: 1.37 $ ' =~ /\$Revision:\s+([^\s]+)/;
 
 getopts('id', \%opt);
 
@@ -103,7 +103,8 @@ my $fh=new FileHandle "<$config_dir/genfw/rules"
 my $last;
 while (<$fh>) {
     chomp;
-    s/(?<!\\)#.*$//; # Strip comments ("\" escapes "#") *FIXME* - we never strip them
+    s/(?<!\\)#.*$//; # Strip comments ("\" escapes "#")
+    s/\\#/#/g;
     $_=$last.$_ if ($last);
     if (s/\\\s*$//) {
         $last=$_;
@@ -670,7 +671,8 @@ sub parseconfig($$) {
     if (my $config=new FileHandle "<$configfile") {
         while (<$config>) {
             chomp;
-            s/(?<!\\)#.*$//; # Strip comments ("\" escapes "#") *FIXME* - we never strip them
+            s/(?<!\\)#.*$//; # Strip comments ("\" escapes "#")
+            s/\\#/#/g;
             next if (/^\s*$/); # Skip blank lines
 
             debug $_;
@@ -1027,3 +1029,5 @@ Steven Pritchard E<lt>F<steve@silug.org>E<gt>
 L<iptables(8)>, L<services(5)>, L<protocols(5)>
 
 =cut
+
+# vi: set ai et:
