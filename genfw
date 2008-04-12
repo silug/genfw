@@ -11,7 +11,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# $Id: genfw,v 1.37 2006/08/17 15:03:49 steve Exp $'
+# $Id: genfw,v 1.38 2008/04/12 03:04:00 steve Exp $'
 
 ####
 #
@@ -79,7 +79,7 @@ sub clear_all();
 
 use vars qw($VERSION %interface %conf $config_dir %opt);
 
-( $VERSION ) = '$Revision: 1.37 $ ' =~ /\$Revision:\s+([^\s]+)/;
+( $VERSION ) = '$Revision: 1.38 $ ' =~ /\$Revision:\s+([^\s]+)/;
 
 getopts('id', \%opt);
 
@@ -804,7 +804,21 @@ sub iptables(@) {
 }
 
 sub new_chain($) {
-    iptables("-N", $_[0]);
+    my $chain=$_[0];
+    my $table;
+
+    if ($chain=~/^([^:]+):(.+)$/) {
+        $table=$1;
+        $chain=$2;
+    }
+
+    debug "new chain $chain" . (defined $table ? ", table '$table'" : "");
+
+    my @args;
+    @args=("-t", $table) if (defined $table);
+    push(@args, "-N", $chain);
+
+    iptables(@args);
 }
 
 sub insert($) {
@@ -918,9 +932,10 @@ to port 3128 (for transparent proxying with squid):
 This inserts I<rule> at the beginning of I<chain> in a specified I<table>.
 See L</append> above.
 
-=item C<chain> I<name> [I<comment>]
+=item C<chain> [I<table>:]I<name> [I<comment>]
 
-This creates a chain named I<name> (for use with C<append> and C<insert>).
+This creates a chain named I<name> in the specified I<table> (for use with
+C<append> and C<insert>).
 
 =item C<no logging>
 
