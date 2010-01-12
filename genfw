@@ -18,7 +18,7 @@
 # TODO:
 #
 #     * FIXME - Maximum prefix length 29 for --log-prefix
-#     * FIXME - Chain names have a maximum length (31 characters?) too
+#     * FIXME - Chain names have a maximum length (30 characters) too
 #     * FIXME - We should do something useful with inserted or appended
 #               rules in tables other than filter and nat.
 #     * FIXME - It would probably be good to set the default policy for
