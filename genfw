@@ -1,17 +1,15 @@
-#!/usr/bin/perl -w
+#!/usr/bin/perl
 #
 # genfw - Generate a firewall script from some rules
 #         and a Red Hat box's network configuration
 #
-# Copyright (C) 2001 Steven Pritchard <steve@silug.org>
+# Copyright (C) 2001-2010 Steven Pritchard <steve@silug.org>
 # This program is free software; you can redistribute it
 # and/or modify it under the same terms as Perl itself.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-#
-# $Id: genfw,v 1.38 2008/04/12 03:04:00 steve Exp $'
 
 ####
 #
@@ -43,6 +41,7 @@
 ####
 
 use strict;
+use warnings;
 
 use FileHandle;
 use DirHandle;
@@ -77,9 +76,12 @@ sub append($);
 sub action($$);
 sub clear_all();
 
-use vars qw($VERSION %interface %conf $config_dir %opt);
+our $VERSION=1.39;
 
-( $VERSION ) = '$Revision: 1.38 $ ' =~ /\$Revision:\s+([^\s]+)/;
+our %interface=();
+our %conf=();
+our $config_dir;
+our %opt=();
 
 getopts('id', \%opt);
 
