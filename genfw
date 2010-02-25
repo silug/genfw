@@ -11,38 +11,6 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-####
-#
-# TODO:
-#
-#     * FIXME - Maximum prefix length 29 for --log-prefix
-#     * FIXME - Chain names have a maximum length (30 characters) too
-#     * FIXME - We should do something useful with inserted or appended
-#               rules in tables other than filter and nat.
-#     * FIXME - It would probably be good to set the default policy for
-#               chains in other tables (like nat) to DROP and then add
-#               explicit rules for accepting packets.
-#     * FIXME - We get warnings when things (like NETWORK and BROADCAST)
-#               aren't defined in ifcfg-*.
-#     * FIXME - We should be dropping reserved addresses.
-#     * FIXME - We should be dropping traffic to/from port 0.
-#     * FIXME - Handle quotes in insert and append statements (at least).
-#     * FIXME - The "nat" handling could use some extensions:
-#               * SNAT from a specific address (other than the default)
-#               * DNAT (from the outside address or a random address)
-#     * FIXME - "allow" should handle source ports.
-#     * FIXME - "allow" should handle ranges of ports.
-#     * FIXME - There should be an option to specify where to find the
-#               configuration files.
-#     * FIXME - I'd like to see this work on Debian (at least).
-#     * FIXME - "append" and "insert" to non-existent chains should give
-#               an error
-#
-#     * Maybe make generic "int", "out", and "dmz" chains (and combos of
-#       those) so we can have generic rules for all int-int, int-out, etc.?
-#
-####
-
 use strict;
 use warnings;
 
