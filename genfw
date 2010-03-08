@@ -460,7 +460,8 @@ sub generate_rules(%) {
                 my @rule=(qw(-t nat -A PREROUTING -i), $in, "-d",
                           $cfg->{'network'} . "/" . $cfg->{'netmask'});
                 iptables @rule, @{$conf{'log'}}, "--log-prefix",
-                         label($in) . " -> " . label($out) . " - bad dest: "
+                         sprintf("%.29s",
+                             label($in) . " -> " . label($out) . ": bad dest: ")
                     if (@{$conf{'log'}});
                 iptables @rule, qw(-j DROP);
             }
@@ -494,7 +495,8 @@ sub drop($$) {
     my ($in, $out)=@_;
 
     iptables "-A", label($in) . "-" . label($out), @{$conf{'log'}},
-          "--log-prefix", label($in) . " -> " . label($out) . ": "
+          "--log-prefix", sprintf("%.29s",
+              label($in) . " -> " . label($out) . ": ")
         if (@{$conf{'log'}});
     iptables "-A", label($in) . "-" . label($out), qw(-j DROP);
 }
@@ -527,7 +529,7 @@ sub filter_from($$) {
         }
         my @rule=("-A", label($in), "-d", $cfg->{$item});
         iptables @rule, @{$conf{'log'}}, "--log-prefix",
-                 label($in) . " - from $item: "
+                 sprintf("%.29s", label($in) . ": $item: ")
             if (@{$conf{'log'}});
         iptables @rule, qw(-j DROP);
     }
@@ -555,7 +557,8 @@ sub filter_to($$$) {
         }
         my @rule=("-A", label($in) . "-" . label($out), "-d", $cfg->{$item});
         iptables @rule, @{$conf{'log'}}, "--log-prefix",
-                 label($in) . "-" . label($out) . " - to $item: "
+                 sprintf("%.29s",
+                     label($in) . "-" . label($out) . ": $item: ")
             if (@{$conf{'log'}});
         iptables @rule, qw(-j DROP);
     }
