@@ -48,7 +48,7 @@ sub append($);
 sub action($$);
 sub clear_all();
 
-our $VERSION=1.39;
+our $VERSION=1.40;
 
 our %interface=();
 our %conf=();
@@ -695,15 +695,15 @@ sub parseconfig($$) {
 
             debug "Calculated network $network, broadcast $broadcast";
 
-            if ($network ne $cfg{'network'}) {
+            if (!defined($cfg{'network'}) or $network ne $cfg{'network'}) {
                 warn "$configfile has incorrect network address $cfg{'network'}\n"
-                    if ($cfg{'network'});
+                    if (defined($cfg{'network'}));
                 $cfg{'network'}=$network;
             }
 
-            if ($broadcast ne $cfg{'broadcast'}) {
+            if (!defined($cfg{'broadcast'}) or $broadcast ne $cfg{'broadcast'}) {
                 warn "$configfile has incorrect broadcast address $cfg{'broadcast'}\n"
-                    if ($cfg{'broadcast'});
+                    if (defined($cfg{'broadcast'}));
                 $cfg{'broadcast'}=$broadcast;
             }
         }
