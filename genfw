@@ -400,7 +400,7 @@ sub generate_rules(%) {
                 for my $iface ($in, $out) {
                     if (!defined($interface{$iface}->{'cfg'})
                         or !@{$interface{$iface}->{'cfg'}}) {
-                        warn "I have no configuration for interface $iface!\n";
+                        debug "I have no configuration for interface $iface!\n";
                         return;
                     }
                 }
@@ -511,7 +511,7 @@ sub filter_from($$) {
     debug "$in, filtering from $item";
 
     if (!defined($interface{$in}->{'cfg'}) or !@{$interface{$in}->{'cfg'}}) {
-        warn "I have no configuration for interface $in!\n";
+        debug "I have no configuration for interface $in!\n";
         return;
     }
 
@@ -539,7 +539,7 @@ sub filter_to($$$) {
     debug "$in -> $out, filtering to $item";
 
     if (!defined($interface{$out}->{'cfg'}) or !@{$interface{$out}->{'cfg'}}) {
-        warn "I have no configuration for interface $out!\n";
+        debug "I have no configuration for interface $out!\n";
         return;
     }
 
@@ -668,8 +668,7 @@ sub parseconfig($$) {
                 if ($var eq "DEVICE") {
                     warn "$configfile says DEVICE is $value not $name!\n"
                         if ($value!~/^$name(?::\d+)?$/);
-                }
-                elsif ($var=~/^(?:IPADDR|NETMASK|NETWORK|BROADCAST|BOOTPROTO)$/) {
+                } elsif ($var=~/^(?:IPADDR|NETMASK|NETWORK|BROADCAST|BOOTPROTO)$/) {
                     warn "$name " . lc($var)
                        . " redefined, $configfile line $.\n"
                         if (defined($cfg{lc($var)}));
@@ -678,37 +677,36 @@ sub parseconfig($$) {
                     debug "Skipping uninteresting variable $var...";
                 }
             } else {
-                warn "Skipping strange configuration line:\n\t$_\n"
+                debug "Skipping strange configuration line:\n\t$_\n"
                    . "$configfile line $.\n";
                 next;
             }
         }
     } else {
-        warn "Couldn't open $configfile: $!\n";
+        debug "Couldn't open $configfile: $!\n";
     }
 
-    if ($cfg{'bootproto'} eq 'none' or $cfg{'bootproto'} eq 'static') {
-        my $network=inet_ntoa(inet_aton($cfg{'ipaddr'})
-                              & inet_aton($cfg{'netmask'}));
-        my $broadcast=inet_ntoa(inet_aton($cfg{'ipaddr'})
-                                | (~ inet_aton($cfg{'netmask'})));
+    if (%cfg) {
+        if ($cfg{'bootproto'} eq 'none' or $cfg{'bootproto'} eq 'static') {
+            my $network=inet_ntoa(inet_aton($cfg{'ipaddr'})
+                                  & inet_aton($cfg{'netmask'}));
+            my $broadcast=inet_ntoa(inet_aton($cfg{'ipaddr'})
+                                    | (~ inet_aton($cfg{'netmask'})));
 
-        debug "Calculated network $network, broadcast $broadcast";
+            debug "Calculated network $network, broadcast $broadcast";
 
-        if ($network ne $cfg{'network'}) {
-            warn "$configfile has incorrect network address $cfg{'network'}\n"
-                if ($cfg{'network'});
-            $cfg{'network'}=$network;
+            if ($network ne $cfg{'network'}) {
+                warn "$configfile has incorrect network address $cfg{'network'}\n"
+                    if ($cfg{'network'});
+                $cfg{'network'}=$network;
+            }
+
+            if ($broadcast ne $cfg{'broadcast'}) {
+                warn "$configfile has incorrect broadcast address $cfg{'broadcast'}\n"
+                    if ($cfg{'broadcast'});
+                $cfg{'broadcast'}=$broadcast;
+            }
         }
-
-        if ($broadcast ne $cfg{'broadcast'}) {
-            warn "$configfile has incorrect broadcast address $cfg{'broadcast'}\n"
-                if ($cfg{'broadcast'});
-            $cfg{'broadcast'}=$broadcast;
-        }
-    } else {
-        # We leave ipaddr undefined to denote a dynamic interface.
-        $cfg{'ipaddr'}=undef;
     }
 
     return %cfg;
