@@ -31,6 +31,7 @@ sub accept($$);
 sub filter_from($$);
 sub filter_to($$$);
 sub generate_rules(%);
+sub parserules($);
 sub parseconfig($$);
 sub debug(@);
 sub bold($);
@@ -69,85 +70,7 @@ if (defined($ENV{'DEBUG'}) || $opt{'d'}) {
 # Default
 $conf{'log'}=[qw(-m limit -j LOG)];
 
-my $fh=new FileHandle "<$config_dir/genfw/rules"
-    or die "Couldn't open $config_dir/genfw/rules: $!\n";
-
-# *FIXME* - need to handle when the last line ends in '\'
-my $last;
-while (<$fh>) {
-    chomp;
-    s/(?<!\\)#.*$//; # Strip comments ("\" escapes "#")
-    s/\\#/#/g;
-    $_=$last.$_ if ($last);
-    if (s/\\\s*$//) {
-        $last=$_;
-	next;
-    } else {
-        $last="";
-    }
-    next if (/^\s*$/); # Skip blank lines
-
-    debug "$_";
-    my @parts=split;
-    if ($parts[0]=~/^(dmz)$/ or
-        $parts[0]=~/^(int)(?:ernal)?$/ or
-        $parts[0]=~/^(out)(?:put|side)?$/)
-    {
-        my $type=$1;
-        shift @parts;
-        my $name=shift(@parts);
-        if (!$name) {
-            warn "No interface defined:\n\t$_\nSkipping...\n";
-            next;
-        }
-        debug "Interface $name, type $type found.";
-        if (defined($interface{$name})) {
-            warn "Skipping duplicate definition for interface $name:\n\t$_\n";
-            next;
-        }
-        $interface{$name}={'type' => $type};
-        if (@parts) {
-            $interface{$name}->{'flags'}=[@parts];
-            debug "interface $name flags \"@{$interface{$name}->{'flags'}}\"";
-        }
-    } elsif (defined($parts[1]) and ($parts[1] eq "logging")) {
-	if ($parts[0] eq "no") {
-	    $conf{'log'}=[];
-	} elsif ($parts[0] eq "limit") {
-	    $conf{'log'}=[qw(-m limit -j LOG)];
-	} elsif ($parts[0] eq "full") {
-	    $conf{'log'}=[qw(-j LOG)];
-	} else {
-	    warn "I don't know what you mean by '@parts[0,1]' (line $.).\n";
-	    next;
-	}
-    }
-    elsif ($parts[0]=~/^(append|insert)$/
-           and defined($parts[1]) and defined($parts[2]))
-    {
-	# This is a totally bogus test.
-	#if ($parts[1]!~
-	#	/^((filter:)?(INPUT|OUTPUT|FORWARD)|nat:(PRE|POST)ROUTING)$/)
-	#{
-	#    warn "Ignoring $parts[0] on unknown chain $parts[1] "
-	#       . "(rules line $.).\n";
-	#    next;
-	#}
-	$parts[0]=~s/^filter://;
-	push(@{$conf{$parts[0]}->{$parts[1]}}, [@parts[2..$#parts]]);
-    } elsif ($parts[0] eq "chain" and defined($parts[1])) {
-        if (@parts>2) {
-            $conf{$parts[0]}->{$parts[1]}="@parts[2 .. $#parts]";
-        } else {
-            $conf{$parts[0]}->{$parts[1]}="";
-        }
-        push(@{$conf{'chains'}}, $parts[1]);
-    } else {
-	warn "Skipping bogus line ($.):\n\t$_\n";
-	next;
-    }
-    debug;
-}
+parserules("$config_dir/genfw/rules");
 
 for my $name (keys(%interface)) {
     if (grep(/^ignore$/, @{$interface{$name}->{'flags'}})) {
@@ -634,6 +557,90 @@ sub filter_to($$$) {
 	         label($in) . "-" . label($out) . " - to $item: "
 	    if (@{$conf{'log'}});
 	iptables @rule, qw(-j DROP);
+    }
+}
+
+sub parserules($) {
+    my $file=shift;
+
+    my $fh=new FileHandle $file, "r"
+        or die "Couldn't open $file: $!\n";
+
+    # *FIXME* - need to handle when the last line ends in '\'
+    my $last;
+    while (<$fh>) {
+        chomp;
+        s/(?<!\\)#.*$//; # Strip comments ("\" escapes "#")
+        s/\\#/#/g;
+        $_=$last.$_ if ($last);
+        if (s/\\\s*$//) {
+            $last=$_;
+    	next;
+        } else {
+            $last="";
+        }
+        next if (/^\s*$/); # Skip blank lines
+
+        debug "$_";
+        my @parts=split;
+        if ($parts[0]=~/^(dmz)$/ or
+            $parts[0]=~/^(int)(?:ernal)?$/ or
+            $parts[0]=~/^(out)(?:put|side)?$/)
+        {
+            my $type=$1;
+            shift @parts;
+            my $name=shift(@parts);
+            if (!$name) {
+                warn "No interface defined:\n\t$_\nSkipping...\n";
+                next;
+            }
+            debug "Interface $name, type $type found.";
+            if (defined($interface{$name})) {
+                warn "Skipping duplicate definition for interface $name:\n\t$_\n";
+                next;
+            }
+            $interface{$name}={'type' => $type};
+            if (@parts) {
+                $interface{$name}->{'flags'}=[@parts];
+                debug "interface $name flags \"@{$interface{$name}->{'flags'}}\"";
+            }
+        } elsif (defined($parts[1]) and ($parts[1] eq "logging")) {
+    	if ($parts[0] eq "no") {
+    	    $conf{'log'}=[];
+    	} elsif ($parts[0] eq "limit") {
+    	    $conf{'log'}=[qw(-m limit -j LOG)];
+    	} elsif ($parts[0] eq "full") {
+    	    $conf{'log'}=[qw(-j LOG)];
+    	} else {
+    	    warn "I don't know what you mean by '@parts[0,1]' (line $.).\n";
+    	    next;
+    	}
+        }
+        elsif ($parts[0]=~/^(append|insert)$/
+               and defined($parts[1]) and defined($parts[2]))
+        {
+    	# This is a totally bogus test.
+    	#if ($parts[1]!~
+    	#	/^((filter:)?(INPUT|OUTPUT|FORWARD)|nat:(PRE|POST)ROUTING)$/)
+    	#{
+    	#    warn "Ignoring $parts[0] on unknown chain $parts[1] "
+    	#       . "(rules line $.).\n";
+    	#    next;
+    	#}
+    	$parts[0]=~s/^filter://;
+    	push(@{$conf{$parts[0]}->{$parts[1]}}, [@parts[2..$#parts]]);
+        } elsif ($parts[0] eq "chain" and defined($parts[1])) {
+            if (@parts>2) {
+                $conf{$parts[0]}->{$parts[1]}="@parts[2 .. $#parts]";
+            } else {
+                $conf{$parts[0]}->{$parts[1]}="";
+            }
+            push(@{$conf{'chains'}}, $parts[1]);
+        } else {
+    	warn "Skipping bogus line ($.):\n\t$_\n";
+    	next;
+        }
+        debug;
     }
 }
 

@@ -25,3 +25,4 @@ TODO:
 
     * Maybe make generic "int", "out", and "dmz" chains (and combos of
       those) so we can have generic rules for all int-int, int-out, etc.?
+    * Pull configuration from /etc/sysconfig/genfw/rules.d/
