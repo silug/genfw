@@ -561,6 +561,8 @@ sub parserules($) {
     my $fh=new FileHandle $file, "r"
         or die "Couldn't open $file: $!\n";
 
+    debug "Parsing file '$file'...";
+
     # *FIXME* - need to handle when the last line ends in '\'
     my $last;
     while (<$fh>) {
@@ -628,6 +630,12 @@ sub parserules($) {
                 $conf{$parts[0]}->{$parts[1]}="";
             }
             push(@{$conf{'chains'}}, $parts[1]);
+        } elsif ($parts[0] eq "include" and defined($parts[1])) {
+            for my $rule_file (glob(substr($parts[1], 0, 1) eq "/"
+                                    ? $parts[1]
+                                    : "$config_dir/genfw/$parts[1]")) {
+                parserules($rule_file) if (-e $rule_file);
+            }
         } else {
             warn "Skipping bogus line ($.):\n\t$_\n";
             next;
@@ -920,6 +928,10 @@ C<-j LOG> lines.  This is the default.
 =item C<full logging>
 
 Modifies generated rules so that all dropped packets are logged.
+
+=item C<include> I<file>
+
+Includes rules from I<file>, which may be a glob.
 
 =back
 
