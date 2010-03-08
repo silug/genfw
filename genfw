@@ -72,6 +72,12 @@ $conf{'log'}=[qw(-m limit -j LOG)];
 
 parserules("$config_dir/genfw/rules");
 
+if (-d "$config_dir/genfw/rules.d") {
+    for my $file (glob("$config_dir/genfw/rules.d/*.rules")) {
+        parserules($file) if (-e $file);
+    }
+}
+
 for my $name (keys(%interface)) {
     if (grep(/^ignore$/, @{$interface{$name}->{'flags'}})) {
         debug "Skipping interface $name";
@@ -1005,6 +1011,8 @@ This only applies to traffic from an "internal" or "dmz" interface to an
 =head1 FILES
 
 F</etc/sysconfig/genfw/rules>   The rules used to generate the firewall script.
+
+F</etc/sysconfig/genfw/rules.d/*.rules>   Additional rules used to generate the firewall script.
 
 F</etc/sysconfig/network-scripts/ifcfg-*> The network configuration.
 
