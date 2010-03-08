@@ -70,13 +70,16 @@ if (defined($ENV{'DEBUG'}) || $opt{'d'}) {
 # Default
 $conf{'log'}=[qw(-m limit -j LOG)];
 
-parserules("$config_dir/genfw/rules");
-
-if (-d "$config_dir/genfw/rules.d") {
-    for my $file (glob("$config_dir/genfw/rules.d/*.rules")) {
-        parserules($file) if (-e $file);
+my $rules_found=0;
+for my $rules ("$config_dir/genfw/rules",
+               glob("$config_dir/genfw/rules.d/*.rules")) {
+    if (-e $rules) {
+        parserules($rules);
+        $rules_found=1;
     }
 }
+
+exit 0 if (!$rules_found);
 
 for my $name (keys(%interface)) {
     if (grep(/^ignore$/, @{$interface{$name}->{'flags'}})) {
