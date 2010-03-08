@@ -83,22 +83,22 @@ for my $name (keys(%interface)) {
         or die "Failed to open $config_dir/network-scripts: $!\n";
     my @configs=("$config_dir/network-scripts/ifcfg-$name");
     for my $file (grep(/^ifcfg-$name:\d+$/, $dir->read)) {
-	push(@configs, "$config_dir/network-scripts/$file");
+        push(@configs, "$config_dir/network-scripts/$file");
     }
     for my $configfile (@configs) {
-	debug "configfile: $configfile";
+        debug "configfile: $configfile";
 
         my %cfg=parseconfig($configfile, $name);
-	next if (!%cfg);
+        next if (!%cfg);
 
         push(@{$interface{$name}->{'cfg'}}, \%cfg);
         for my $cfg (@{$interface{$name}->{'cfg'}}) {
             debug "interface $name";
             if (defined($cfg->{'ipaddr'})) {
-	        debug "  address " . $cfg->{'ipaddr'};
+                debug "  address " . $cfg->{'ipaddr'};
                 debug "  netmask " . $cfg->{'netmask'};
-	        debug "  network " . $cfg->{'network'};
-	        debug "  broadcast " . $cfg->{'broadcast'};
+                debug "  network " . $cfg->{'network'};
+                debug "  broadcast " . $cfg->{'broadcast'};
             }
         }
     }
@@ -138,45 +138,44 @@ sub check_allowed($$) {
             $item=~s/^allow=//;
             next if (!$item);
             for my $ports (split /,/, $item) {
-		# *FIXME* - probably should verify that source
-		# & destination are valid-looking addresses
-	        my ($port, $proto, $from, $to, $interface)=
+                # *FIXME* - probably should verify that source
+                # & destination are valid-looking addresses
+                my ($port, $proto, $from, $to, $interface)=
                     $ports=~/^(.*?)           # port (or protocol)
-		              (?:\/(.*?))?    # protocol (can be omitted)
-			      (?::(.*?))?     # source address (ditto)
-			      (?::(.*?))?     # destination address (ditto)
-			      (?::(.*?))?     # source interface
-			     $/x;
-		next if ($interface and $interface ne $in);
-		if (!$proto) {
-		    if ($port=~/^\d+$/) {
-			warn "ambiguous allow '$port', ignoring...\n";
-			next;
-		    }
-		    my $found=0;
-		    for $proto ("tcp", "udp") {
-		        if (getservbyname($port, $proto))
-		        {
-			    push(@open_port, [$port, $proto, $from, $to]);
-			    $found++;
-		        }
-		    }
-		    if (!$found) {
-			if (getprotobyname($port)) {
-			    push(@open_port, [undef, $port, $from, $to]);
-			} else {
-			    warn "ambiguous allow '$port', ignoring...\n";
-			    next;
-			}
-		    }
-		} else {
+                              (?:\/(.*?))?    # protocol (can be omitted)
+                              (?::(.*?))?     # source address (ditto)
+                              (?::(.*?))?     # destination address (ditto)
+                              (?::(.*?))?     # source interface
+                             $/x;
+                next if ($interface and $interface ne $in);
+                if (!$proto) {
+                    if ($port=~/^\d+$/) {
+                        warn "ambiguous allow '$port', ignoring...\n";
+                        next;
+                    }
+                    my $found=0;
+                    for $proto ("tcp", "udp") {
+                        if (getservbyname($port, $proto)) {
+                            push(@open_port, [$port, $proto, $from, $to]);
+                            $found++;
+                        }
+                    }
+                    if (!$found) {
+                        if (getprotobyname($port)) {
+                            push(@open_port, [undef, $port, $from, $to]);
+                        } else {
+                            warn "ambiguous allow '$port', ignoring...\n";
+                            next;
+                        }
+                    }
+                } else {
                     if ($port!~/^\d+$/ and !getservbyname($port, $proto)) {
-		        warn "invalid port/proto '$port/$proto', ignoring...\n";
-			next;
-		    }
+                        warn "invalid port/proto '$port/$proto', ignoring...\n";
+                        next;
+                    }
 
-	            push(@open_port, [$port, $proto, $from, $to]);
-		}
+                    push(@open_port, [$port, $proto, $from, $to]);
+                }
             }
         }
 
@@ -199,21 +198,21 @@ sub allow($$@) {
     iptables "-A", label($in) . "-" . label($out),
              "-p", $proto, $port ? ("--dport", $port) : (),
              $from ? ("-s", $from) : (), $to ? ("-d", $to) : (),
-	     qw(-j ACCEPT);
+             qw(-j ACCEPT);
 }
 
 sub label($) {
     my ($name)=@_;
 
     if (my ($label)=grep /^label=/, @{$interface{$name}->{'flags'}}) {
-	$label=~s/^label=(.*)$/$1/;
-	if ($label) {
-	    return $label;
-	} else {
-	    return $name;
-	}
+        $label=~s/^label=(.*)$/$1/;
+        if ($label) {
+            return $label;
+        } else {
+            return $name;
+        }
     } else {
-	return $name;
+        return $name;
     }
 }
 
@@ -229,7 +228,7 @@ sub generate_rules(%) {
     comment_long "Allow established connections.";
     new_chain("established");
     iptables qw(-A established -m state --state), "ESTABLISHED,RELATED",
-	     qw(-j ACCEPT);
+             qw(-j ACCEPT);
     comment_long "Filter ICMP traffic.";
     new_chain("icmp-filter");
     iptables qw(-A icmp-filter -p icmp -j ACCEPT);
@@ -242,83 +241,81 @@ sub generate_rules(%) {
                 comment_long $chain;
             }
             new_chain($chain);
-	    insert($chain);
-	    append($chain);
+            insert($chain);
+            append($chain);
         }
     }
 
     for my $in (keys(%interface)) {
         next if (grep(/^ignore$/, @{$interface{$in}->{'flags'}}));
 
-	for my $out (keys(%interface)) {
+        for my $out (keys(%interface)) {
             next if ($in eq $out or
                      grep(/^ignore$/, @{$interface{$out}->{'flags'}}));
 
-	    my $label=label($in) . "-" . label($out);
+            my $label=label($in) . "-" . label($out);
 
-	    comment_block(label($in) . " -> " . label($out));
-	    new_chain($label);
-	    debug "insert($label)";
-	    insert($label);
-	    if ($interface{$in}->{'type'} eq "out" and
-	        $interface{$out}->{'type'} eq "out")
-	    {
-	        drop($in, $out);
-	    } else {
-	        # Filter traffic to the network address.
-		filter_to($in, $out, "network");
-		# Filter traffic to the broadcast address.
-		filter_to($in, $out, "broadcast");
+            comment_block(label($in) . " -> " . label($out));
+            new_chain($label);
+            debug "insert($label)";
+            insert($label);
+            if ($interface{$in}->{'type'} eq "out" and
+                $interface{$out}->{'type'} eq "out") {
+                drop($in, $out);
+            } else {
+                # Filter traffic to the network address.
+                filter_to($in, $out, "network");
+                # Filter traffic to the broadcast address.
+                filter_to($in, $out, "broadcast");
 
                 if (($interface{$in}->{'type'} eq "int" and
-		     grep /^trusted$/, @{$interface{$in}->{'flags'}}) or
-		    ($interface{$in}->{'type'} eq "dmz" and
-		     $interface{$out}->{'type'} eq "out" and
-		     grep /^trusted$/, @{$interface{$in}->{'flags'}}))
-		{
-		    debug "append($label)";
-		    append($label);
-		    &main::accept($in, $out);
-		} else {
-		    check_allowed($in, $out);
-		    debug "append($label)";
-		    append($label);
-		    icmpfilter($in, $out);
-		    established($in, $out);
+                     grep /^trusted$/, @{$interface{$in}->{'flags'}}) or
+                    ($interface{$in}->{'type'} eq "dmz" and
+                     $interface{$out}->{'type'} eq "out" and
+                     grep /^trusted$/, @{$interface{$in}->{'flags'}})) {
+                    debug "append($label)";
+                    append($label);
+                    &main::accept($in, $out);
+                } else {
+                    check_allowed($in, $out);
+                    debug "append($label)";
+                    append($label);
+                    icmpfilter($in, $out);
+                    established($in, $out);
                     reject_auth($in, $out);
-		    drop($in, $out);
-		}
-	    }
-	}
+                    drop($in, $out);
+                }
+            }
+        }
     }
 
     for my $in (keys(%interface)) {
         next if (grep(/^ignore$/, @{$interface{$in}->{'flags'}}));
 
-	comment_block("Filter traffic from " . label($in) . ".");
-	new_chain(label($in));
+        comment_block("Filter traffic from " . label($in) . ".");
+        new_chain(label($in));
 
-	debug "insert(" . label($in) . ")";
-	insert(label($in));
+        debug "insert(" . label($in) . ")";
+        insert(label($in));
 
         # *FIXME* - need to handle aliased interfaces on the same
         # subnet correctly (without adding additional rules)
-	filter_from($in, "network");
-	filter_from($in, "broadcast");
+        filter_from($in, "network");
+        filter_from($in, "broadcast");
 
-	for my $out (keys(%interface)) {
+        for my $out (keys(%interface)) {
             next if (grep(/^ignore$/, @{$interface{$out}->{'flags'}}));
 
-	    if ($in eq $out) {
-	        iptables("-A", label($in), "-o", $out, "-j", "ACCEPT");
-	    } else {
+            if ($in eq $out) {
+                iptables("-A", label($in), "-o", $out, "-j", "ACCEPT");
+            } else {
                 iptables("-A", label($in), "-o", $out, "-j",
-		         label($in) . "-" . label($out));
-	    }
-	}
+                         label($in) . "-" . label($out));
+            }
+        }
 
-	debug "append(" . label($in) . ")";
-	append(label($in));
+        debug "append(" . label($in) . ")";
+        append(label($in));
     }
 
     comment_block("INPUT chain.");
@@ -329,13 +326,12 @@ sub generate_rules(%) {
     iptables qw(-A INPUT -i lo -j ACCEPT);
 
     for my $iface (keys(%interface)) {
-	next if (grep /^ignore$/, @{$interface{$iface}->{'flags'}});
+        next if (grep /^ignore$/, @{$interface{$iface}->{'flags'}});
 
-	if (($interface{$iface}->{'type'} eq "int") &&
-	    grep /^trusted$/, @{$interface{$iface}->{'flags'}})
-	{
-	    iptables("-A", "INPUT", "-i", $iface, "-j", "ACCEPT");
-	}
+        if (($interface{$iface}->{'type'} eq "int") &&
+            grep /^trusted$/, @{$interface{$iface}->{'flags'}}) {
+            iptables("-A", "INPUT", "-i", $iface, "-j", "ACCEPT");
+        }
     }
 
     debug "append(INPUT)";
@@ -343,7 +339,7 @@ sub generate_rules(%) {
 
     iptables qw(-A INPUT -p tcp --dport 113 -j REJECT --reject-with tcp-reset);
     iptables qw(-A INPUT -p udp --dport 113 -j REJECT),
-	     qw(--reject-with icmp-port-unreachable);
+             qw(--reject-with icmp-port-unreachable);
     iptables qw(-A INPUT -j icmp-filter);
 
     iptables qw(-A INPUT), @{$conf{'log'}}, "--log-prefix",
@@ -366,7 +362,7 @@ sub generate_rules(%) {
     for my $in (keys(%interface)) {
         next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
 
-	iptables qw(-A FORWARD -i), $in, "-j", label($in);
+        iptables qw(-A FORWARD -i), $in, "-j", label($in);
     }
 
     debug "append(FORWARD)";
@@ -386,50 +382,49 @@ sub generate_rules(%) {
         next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
 
         debug "checking interface $in";
-	if (grep /^nat$/, @{$interface{$in}->{'flags'}}) {
-	    debug "need to nat interface $in";
-	    for my $out (keys(%interface)) {
-		next if ($in eq $out or
-		         $interface{$out}->{'type'} ne "out" or
-		         grep /^ignore$/, @{$interface{$out}->{'flags'}});
+        if (grep /^nat$/, @{$interface{$in}->{'flags'}}) {
+            debug "need to nat interface $in";
+            for my $out (keys(%interface)) {
+                next if ($in eq $out or
+                         $interface{$out}->{'type'} ne "out" or
+                         grep /^ignore$/, @{$interface{$out}->{'flags'}});
 
-		debug "found interface $out to nat out";
+                debug "found interface $out to nat out";
 
-		for my $iface ($in, $out) {
+                for my $iface ($in, $out) {
                     if (!defined($interface{$iface}->{'cfg'})
-                        or !@{$interface{$iface}->{'cfg'}})
-                    {
-	                warn "I have no configuration for interface $iface!\n";
-	                return;
+                        or !@{$interface{$iface}->{'cfg'}}) {
+                        warn "I have no configuration for interface $iface!\n";
+                        return;
                     }
-		}
+                }
 
-		# I can't see where there is any point to this warning.
-		#if (@{$interface{$out}->{'cfg'}}>1)
-		#{
-		#    warn "interface $out has multiple configurations, " .
-		#	 "using first address found.\n";
-		#}
+                # I can't see where there is any point to this warning.
+                #if (@{$interface{$out}->{'cfg'}}>1)
+                #{
+                #    warn "interface $out has multiple configurations, " .
+                #        "using first address found.\n";
+                #}
 
-		for my $cfg (@{$interface{$in}->{'cfg'}}) {
+                for my $cfg (@{$interface{$in}->{'cfg'}}) {
                     # *FIXME* - need to handle aliased interfaces on the same
                     # subnet correctly (without adding additional rules)
                     # *FIXME* - This also isn't going to work if the *inside*
                     # interface is dynamically assigned, although that just
                     # wouldn't usually make a hell of a lot of sense...
                     if (defined($interface{$out}->{'cfg'}->[0]->{'ipaddr'})) {
-		        iptables qw(-t nat -A POSTROUTING -o), $out, "-s",
-		                 $cfg->{'network'} . "/" . $cfg->{'netmask'},
+                        iptables qw(-t nat -A POSTROUTING -o), $out, "-s",
+                                 $cfg->{'network'} . "/" . $cfg->{'netmask'},
                                  qw(-j SNAT --to),
-		                 $interface{$out}->{'cfg'}->[0]->{'ipaddr'};
+                                 $interface{$out}->{'cfg'}->[0]->{'ipaddr'};
                     } else {
-		        iptables qw(-t nat -A POSTROUTING -o), $out, "-s",
-		                 $cfg->{'network'} . "/" . $cfg->{'netmask'},
+                        iptables qw(-t nat -A POSTROUTING -o), $out, "-s",
+                                 $cfg->{'network'} . "/" . $cfg->{'netmask'},
                                  qw(-j MASQUERADE);
                     }
-		}
-	    }
-	}
+                }
+            }
+        }
     }
 
     debug "append(nat:POSTROUTING)";
@@ -443,27 +438,27 @@ sub generate_rules(%) {
     for my $in (keys(%interface)) {
         debug "PREROUTING: checking $in...";
         next if ($interface{$in}->{'type'} ne "out" or
-	         grep /^ignore$/, @{$interface{$in}->{'flags'}});
+                 grep /^ignore$/, @{$interface{$in}->{'flags'}});
 
-	for my $out (keys(%interface)) {
+        for my $out (keys(%interface)) {
             debug "PREROUTING:   checking $out -> $in...";
-	    next if ($in eq $out or $interface{$out}->{'type'} eq "out" or
-		     grep /^ignore$/, @{$interface{$out}->{'flags'}} or
-	             !grep /^nat$/, @{$interface{$out}->{'flags'}});
+            next if ($in eq $out or $interface{$out}->{'type'} eq "out" or
+                     grep /^ignore$/, @{$interface{$out}->{'flags'}} or
+                     !grep /^nat$/, @{$interface{$out}->{'flags'}});
 
-	    debug "filtering traffic to $out from $in...";
+            debug "filtering traffic to $out from $in...";
 
-	    for my $cfg (@{$interface{$out}->{'cfg'}}) {
+            for my $cfg (@{$interface{$out}->{'cfg'}}) {
                 # *FIXME* - need to handle aliased interfaces on the same
                 # subnet correctly (without adding additional rules)
-		my @rule=(qw(-t nat -A PREROUTING -i), $in, "-d",
-		          $cfg->{'network'} . "/" . $cfg->{'netmask'});
-	        iptables @rule, @{$conf{'log'}}, "--log-prefix",
-	                 label($in) . " -> " . label($out) . " - bad dest: "
-	            if (@{$conf{'log'}});
-	        iptables @rule, qw(-j DROP);
-	    }
-	}
+                my @rule=(qw(-t nat -A PREROUTING -i), $in, "-d",
+                          $cfg->{'network'} . "/" . $cfg->{'netmask'});
+                iptables @rule, @{$conf{'log'}}, "--log-prefix",
+                         label($in) . " -> " . label($out) . " - bad dest: "
+                    if (@{$conf{'log'}});
+                iptables @rule, qw(-j DROP);
+            }
+        }
     }
 
     debug "append(nat:PREROUTING)";
@@ -510,8 +505,8 @@ sub filter_from($$) {
     debug "$in, filtering from $item";
 
     if (!defined($interface{$in}->{'cfg'}) or !@{$interface{$in}->{'cfg'}}) {
-	warn "I have no configuration for interface $in!\n";
-	return;
+        warn "I have no configuration for interface $in!\n";
+        return;
     }
 
     comment "Filter traffic from the $item address(es).";
@@ -521,14 +516,14 @@ sub filter_from($$) {
         next if (!defined($cfg->{'ipaddr'}));
 
         if ($cfg->{$item} eq $cfg->{'ipaddr'}) {
-	    comment "Skipping point-to-point address " . $cfg->{'ipaddr'} . ".";
-	    next;
-	}
+            comment "Skipping point-to-point address " . $cfg->{'ipaddr'} . ".";
+            next;
+        }
         my @rule=("-A", label($in), "-d", $cfg->{$item});
-	iptables @rule, @{$conf{'log'}}, "--log-prefix",
-	         label($in) . " - from $item: "
-	    if (@{$conf{'log'}});
-	iptables @rule, qw(-j DROP);
+        iptables @rule, @{$conf{'log'}}, "--log-prefix",
+                 label($in) . " - from $item: "
+            if (@{$conf{'log'}});
+        iptables @rule, qw(-j DROP);
     }
 }
 
@@ -538,8 +533,8 @@ sub filter_to($$$) {
     debug "$in -> $out, filtering to $item";
 
     if (!defined($interface{$out}->{'cfg'}) or !@{$interface{$out}->{'cfg'}}) {
-	warn "I have no configuration for interface $out!\n";
-	return;
+        warn "I have no configuration for interface $out!\n";
+        return;
     }
 
     comment "Filter traffic to the $item address(es).";
@@ -549,14 +544,14 @@ sub filter_to($$$) {
         next if (!defined($cfg->{'ipaddr'}));
 
         if ($cfg->{$item} eq $cfg->{'ipaddr'}) {
-	    comment "Skipping point-to-point address " . $cfg->{'ipaddr'} . ".";
-	    next;
-	}
+            comment "Skipping point-to-point address " . $cfg->{'ipaddr'} . ".";
+            next;
+        }
         my @rule=("-A", label($in) . "-" . label($out), "-d", $cfg->{$item});
-	iptables @rule, @{$conf{'log'}}, "--log-prefix",
-	         label($in) . "-" . label($out) . " - to $item: "
-	    if (@{$conf{'log'}});
-	iptables @rule, qw(-j DROP);
+        iptables @rule, @{$conf{'log'}}, "--log-prefix",
+                 label($in) . "-" . label($out) . " - to $item: "
+            if (@{$conf{'log'}});
+        iptables @rule, qw(-j DROP);
     }
 }
 
@@ -575,7 +570,7 @@ sub parserules($) {
         $_=$last.$_ if ($last);
         if (s/\\\s*$//) {
             $last=$_;
-    	next;
+            next;
         } else {
             $last="";
         }
@@ -585,8 +580,7 @@ sub parserules($) {
         my @parts=split;
         if ($parts[0]=~/^(dmz)$/ or
             $parts[0]=~/^(int)(?:ernal)?$/ or
-            $parts[0]=~/^(out)(?:put|side)?$/)
-        {
+            $parts[0]=~/^(out)(?:put|side)?$/) {
             my $type=$1;
             shift @parts;
             my $name=shift(@parts);
@@ -605,30 +599,28 @@ sub parserules($) {
                 debug "interface $name flags \"@{$interface{$name}->{'flags'}}\"";
             }
         } elsif (defined($parts[1]) and ($parts[1] eq "logging")) {
-    	if ($parts[0] eq "no") {
-    	    $conf{'log'}=[];
-    	} elsif ($parts[0] eq "limit") {
-    	    $conf{'log'}=[qw(-m limit -j LOG)];
-    	} elsif ($parts[0] eq "full") {
-    	    $conf{'log'}=[qw(-j LOG)];
-    	} else {
-    	    warn "I don't know what you mean by '@parts[0,1]' (line $.).\n";
-    	    next;
-    	}
-        }
-        elsif ($parts[0]=~/^(append|insert)$/
-               and defined($parts[1]) and defined($parts[2]))
-        {
-    	# This is a totally bogus test.
-    	#if ($parts[1]!~
-    	#	/^((filter:)?(INPUT|OUTPUT|FORWARD)|nat:(PRE|POST)ROUTING)$/)
-    	#{
-    	#    warn "Ignoring $parts[0] on unknown chain $parts[1] "
-    	#       . "(rules line $.).\n";
-    	#    next;
-    	#}
-    	$parts[0]=~s/^filter://;
-    	push(@{$conf{$parts[0]}->{$parts[1]}}, [@parts[2..$#parts]]);
+            if ($parts[0] eq "no") {
+                $conf{'log'}=[];
+            } elsif ($parts[0] eq "limit") {
+                $conf{'log'}=[qw(-m limit -j LOG)];
+            } elsif ($parts[0] eq "full") {
+                $conf{'log'}=[qw(-j LOG)];
+            } else {
+                warn "I don't know what you mean by '@parts[0,1]' (line $.).\n";
+                next;
+            }
+        } elsif ($parts[0]=~/^(append|insert)$/
+               and defined($parts[1]) and defined($parts[2])) {
+            # This is a totally bogus test.
+            #if ($parts[1]!~
+            #       /^((filter:)?(INPUT|OUTPUT|FORWARD)|nat:(PRE|POST)ROUTING)$/)
+            #{
+            #    warn "Ignoring $parts[0] on unknown chain $parts[1] "
+            #       . "(rules line $.).\n";
+            #    next;
+            #}
+            $parts[0]=~s/^filter://;
+            push(@{$conf{$parts[0]}->{$parts[1]}}, [@parts[2..$#parts]]);
         } elsif ($parts[0] eq "chain" and defined($parts[1])) {
             if (@parts>2) {
                 $conf{$parts[0]}->{$parts[1]}="@parts[2 .. $#parts]";
@@ -637,8 +629,8 @@ sub parserules($) {
             }
             push(@{$conf{'chains'}}, $parts[1]);
         } else {
-    	warn "Skipping bogus line ($.):\n\t$_\n";
-    	next;
+            warn "Skipping bogus line ($.):\n\t$_\n";
+            next;
         }
         debug;
     }
@@ -663,8 +655,7 @@ sub parseconfig($$) {
                     warn "$configfile says DEVICE is $value not $name!\n"
                         if ($value!~/^$name(?::\d+)?$/);
                 }
-                elsif ($var=~/^(?:IPADDR|NETMASK|NETWORK|BROADCAST|BOOTPROTO)$/)
-                {
+                elsif ($var=~/^(?:IPADDR|NETMASK|NETWORK|BROADCAST|BOOTPROTO)$/) {
                     warn "$name " . lc($var)
                        . " redefined, $configfile line $.\n"
                         if (defined($cfg{lc($var)}));
@@ -691,15 +682,15 @@ sub parseconfig($$) {
         debug "Calculated network $network, broadcast $broadcast";
 
         if ($network ne $cfg{'network'}) {
-	    warn "$configfile has incorrect network address $cfg{'network'}\n"
-	        if ($cfg{'network'});
-	    $cfg{'network'}=$network;
+            warn "$configfile has incorrect network address $cfg{'network'}\n"
+                if ($cfg{'network'});
+            $cfg{'network'}=$network;
         }
 
         if ($broadcast ne $cfg{'broadcast'}) {
-	    warn "$configfile has incorrect broadcast address $cfg{'broadcast'}\n"
-	        if ($cfg{'broadcast'});
-	    $cfg{'broadcast'}=$broadcast;
+            warn "$configfile has incorrect broadcast address $cfg{'broadcast'}\n"
+                if ($cfg{'broadcast'});
+            $cfg{'broadcast'}=$broadcast;
         }
     } else {
         # We leave ipaddr undefined to denote a dynamic interface.
@@ -743,7 +734,7 @@ sub comment(@) {
     return if ($opt{'i'});
 
     for my $line (@_) {
-	print "# $line\n";
+        print "# $line\n";
     }
 }
 
@@ -757,7 +748,7 @@ sub set_policy($$$) {
     my @chain=("INPUT", "OUTPUT", "FORWARD");
 
     for (my $n=0;$n<@chain;$n++) {
-	iptables("-P", $chain[$n], $_[$n]);
+        iptables("-P", $chain[$n], $_[$n]);
     }
 }
 
@@ -767,17 +758,17 @@ sub iptables(@) {
     if ($opt{'i'}) {
         push(@command, @_);
         debug "Running '@command' (" . scalar(@command) . " args)...";
-	warn "'@command' failed with exit value " . ($? >> 8)
-	    if (system(@command) != 0);
+        warn "'@command' failed with exit value " . ($? >> 8)
+            if (system(@command) != 0);
     } else {
         my @bits=@_;
 
         for my $part (@bits) {
-	    if ($part=~/[^\w\-\.\/]/) {
-	        $part=~s/'/'\''/g;
-	        $part="'$part'";
-	    }
-	    push @command, $part;
+            if ($part=~/[^\w\-\.\/]/) {
+                $part=~s/'/'\''/g;
+                $part="'$part'";
+            }
+            push @command, $part;
         }
         print "@command\n";
     }
@@ -815,20 +806,20 @@ sub action($$) {
     my $chain;
 
     if ($label=~/^([^:]+):(.*)$/) {
-	$table=$1;
-	$chain=$2;
+        $table=$1;
+        $chain=$2;
     } else {
-	$chain=$label;
+        $chain=$label;
     }
 
     debug "$action in $chain" . (defined $table ? ", table '$table'" : "");
 
     if (defined($conf{$action}) and defined($conf{$action}->{$label})) {
-	my @rules=@{$conf{$action}->{$label}};
-	@rules=reverse @rules if ($action eq 'insert');
+        my @rules=@{$conf{$action}->{$label}};
+        @rules=reverse @rules if ($action eq 'insert');
         for my $rule (@rules) {
-	    debug "Adding rule '@{$rule}'...";
-	    iptables $table ? ("-t", $table) : (), "-A", $chain, @{$rule};
+            debug "Adding rule '@{$rule}'...";
+            iptables $table ? ("-t", $table) : (), "-A", $chain, @{$rule};
         }
     }
 }
@@ -1001,7 +992,7 @@ This only applies to traffic from an "internal" or "dmz" interface to an
 
 =head1 FILES
 
-F</etc/sysconfig/genfw/rules>	The rules used to generate the firewall script.
+F</etc/sysconfig/genfw/rules>   The rules used to generate the firewall script.
 
 F</etc/sysconfig/network-scripts/ifcfg-*> The network configuration.
 
