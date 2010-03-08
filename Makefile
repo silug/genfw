@@ -1,4 +1,4 @@
-FILES   = genfw firewall.init Makefile install.sh genfw.spec
+FILES   = genfw firewall.init Makefile install.sh genfw.spec TODO
 VERSION = $(shell perl -MExtUtils::MakeMaker \
                        -le 'print ExtUtils::MM_Unix::parse_version("","genfw")')
 
