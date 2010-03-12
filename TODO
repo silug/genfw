@@ -23,6 +23,8 @@ TODO:
     * FIXME - We should just append/insert our built-in rules before or
               after reading the rules file(s), then just loop over the
               defined (and non-empty) chains on output.
+    * FIXME - Do something useful with stop/reload/condrestart/status
+              in the init script.
 
     * Maybe make generic "int", "out", and "dmz" chains (and combos of
       those) so we can have generic rules for all int-int, int-out, etc.?
