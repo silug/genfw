@@ -229,6 +229,88 @@ sub label($) {
 sub generate_rules(%) {
     my %interface=@_;
 
+    # Build NAT (POSTROUTING) rules.
+    for my $in (keys(%interface)) {
+        next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
+
+        debug "checking interface $in";
+        if (grep /^nat$/, @{$interface{$in}->{'flags'}}) {
+            debug "need to nat interface $in";
+            for my $out (keys(%interface)) {
+                next if ($in eq $out or
+                         $interface{$out}->{'type'} ne "out" or
+                         grep /^ignore$/, @{$interface{$out}->{'flags'}});
+
+                debug "found interface $out to nat out";
+
+                for my $iface ($in, $out) {
+                    if (!defined($interface{$iface}->{'cfg'})
+                        or !@{$interface{$iface}->{'cfg'}}) {
+                        debug "I have no configuration for interface $iface!\n";
+                        return;
+                    }
+                }
+
+                # I can't see where there is any point to this warning.
+                #if (@{$interface{$out}->{'cfg'}}>1)
+                #{
+                #    warn "interface $out has multiple configurations, " .
+                #        "using first address found.\n";
+                #}
+
+                for my $cfg (@{$interface{$in}->{'cfg'}}) {
+                    # *FIXME* - need to handle aliased interfaces on the same
+                    # subnet correctly (without adding additional rules)
+                    # *FIXME* - This also isn't going to work if the *inside*
+                    # interface is dynamically assigned, although that just
+                    # wouldn't usually make a hell of a lot of sense...
+                    if (defined($interface{$out}->{'cfg'}->[0]->{'ipaddr'})) {
+                        unshift(@{$conf{'append'}->{'nat:POSTROUTING'}},
+                            ["-o", $out, "-s",
+                             $cfg->{'network'} . "/" . $cfg->{'netmask'},
+                             qw(-j SNAT --to),
+                             $interface{$out}->{'cfg'}->[0]->{'ipaddr'}]);
+                    } else {
+                        unshift(@{$conf{'append'}->{'nat:POSTROUTING'}},
+                            ["-o", $out, "-s",
+                             $cfg->{'network'} . "/" . $cfg->{'netmask'},
+                             qw(-j MASQUERADE)]);
+                    }
+                }
+            }
+        }
+    }
+
+    # Build NAT (PREROUTING) rules.
+    for my $in (keys(%interface)) {
+        debug "PREROUTING: checking $in...";
+        next if ($interface{$in}->{'type'} ne "out" or
+                 grep /^ignore$/, @{$interface{$in}->{'flags'}});
+
+        for my $out (keys(%interface)) {
+            debug "PREROUTING:   checking $out -> $in...";
+            next if ($in eq $out or $interface{$out}->{'type'} eq "out" or
+                     grep /^ignore$/, @{$interface{$out}->{'flags'}} or
+                     !grep /^nat$/, @{$interface{$out}->{'flags'}});
+
+            debug "filtering traffic to $out from $in...";
+
+            for my $cfg (@{$interface{$out}->{'cfg'}}) {
+                # *FIXME* - need to handle aliased interfaces on the same
+                # subnet correctly (without adding additional rules)
+                my @rule=(qw(-t nat -A PREROUTING -i), $in, "-d",
+                          $cfg->{'network'} . "/" . $cfg->{'netmask'});
+                unshift(@{$conf{'append'}->{'nat:PREROUTING'}},
+                    [@rule, @{$conf{'log'}}, "--log-prefix",
+                        sprintf("%.29s",
+                            label($in) . " -> " . label($out) . ": bad dest: ")])
+                    if (@{$conf{'log'}});
+                unshift(@{$conf{'append'}->{'nat:PREROUTING'}},
+                    [@rule, qw(-j DROP)]);
+            }
+        }
+    }
+
     begin_script;
 
     comment_long "Set default policy to DROP.";
@@ -397,115 +479,22 @@ sub generate_rules(%) {
         if (@{$conf{'log'}});
     iptables qw(-A FORWARD -j DROP);
 
-    comment_block "POSTROUTING chain (nat table)";
-
-    debug "insert(nat:POSTROUTING)";
-    insert("nat:POSTROUTING");
-
-    for my $in (keys(%interface)) {
-        next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
-
-        debug "checking interface $in";
-        if (grep /^nat$/, @{$interface{$in}->{'flags'}}) {
-            debug "need to nat interface $in";
-            for my $out (keys(%interface)) {
-                next if ($in eq $out or
-                         $interface{$out}->{'type'} ne "out" or
-                         grep /^ignore$/, @{$interface{$out}->{'flags'}});
-
-                debug "found interface $out to nat out";
-
-                for my $iface ($in, $out) {
-                    if (!defined($interface{$iface}->{'cfg'})
-                        or !@{$interface{$iface}->{'cfg'}}) {
-                        debug "I have no configuration for interface $iface!\n";
-                        return;
-                    }
-                }
-
-                # I can't see where there is any point to this warning.
-                #if (@{$interface{$out}->{'cfg'}}>1)
-                #{
-                #    warn "interface $out has multiple configurations, " .
-                #        "using first address found.\n";
-                #}
-
-                for my $cfg (@{$interface{$in}->{'cfg'}}) {
-                    # *FIXME* - need to handle aliased interfaces on the same
-                    # subnet correctly (without adding additional rules)
-                    # *FIXME* - This also isn't going to work if the *inside*
-                    # interface is dynamically assigned, although that just
-                    # wouldn't usually make a hell of a lot of sense...
-                    if (defined($interface{$out}->{'cfg'}->[0]->{'ipaddr'})) {
-                        iptables qw(-t nat -A POSTROUTING -o), $out, "-s",
-                                 $cfg->{'network'} . "/" . $cfg->{'netmask'},
-                                 qw(-j SNAT --to),
-                                 $interface{$out}->{'cfg'}->[0]->{'ipaddr'};
-                    } else {
-                        iptables qw(-t nat -A POSTROUTING -o), $out, "-s",
-                                 $cfg->{'network'} . "/" . $cfg->{'netmask'},
-                                 qw(-j MASQUERADE);
-                    }
-                }
-            }
-        }
-    }
-
-    debug "append(nat:POSTROUTING)";
-    append("nat:POSTROUTING");
-
-    comment_block "PREROUTING chain (nat table)";
-
-    debug "insert(nat:PREROUTING)";
-    insert("nat:PREROUTING");
-
-    for my $in (keys(%interface)) {
-        debug "PREROUTING: checking $in...";
-        next if ($interface{$in}->{'type'} ne "out" or
-                 grep /^ignore$/, @{$interface{$in}->{'flags'}});
-
-        for my $out (keys(%interface)) {
-            debug "PREROUTING:   checking $out -> $in...";
-            next if ($in eq $out or $interface{$out}->{'type'} eq "out" or
-                     grep /^ignore$/, @{$interface{$out}->{'flags'}} or
-                     !grep /^nat$/, @{$interface{$out}->{'flags'}});
-
-            debug "filtering traffic to $out from $in...";
-
-            for my $cfg (@{$interface{$out}->{'cfg'}}) {
-                # *FIXME* - need to handle aliased interfaces on the same
-                # subnet correctly (without adding additional rules)
-                my @rule=(qw(-t nat -A PREROUTING -i), $in, "-d",
-                          $cfg->{'network'} . "/" . $cfg->{'netmask'});
-                iptables @rule, @{$conf{'log'}}, "--log-prefix",
-                         sprintf("%.29s",
-                             label($in) . " -> " . label($out) . ": bad dest: ")
-                    if (@{$conf{'log'}});
-                iptables @rule, qw(-j DROP);
-            }
-        }
-    }
-
-    debug "append(nat:PREROUTING)";
-    append("nat:PREROUTING");
-
-    comment_block "OUTPUT chain (nat table)";
-
-    debug "insert(nat:OUTPUT)";
-    insert("nat:OUTPUT");
-    debug "append(nat:OUTPUT)";
-    append("nat:OUTPUT");
-
     for my $table_chain (
+            map(["nat", $_], qw(POSTROUTING PREROUTING OUTPUT)),
             map(["mangle", $_],
                 qw(PREROUTING OUTPUT INPUT FORWARD POSTROUTING)),
             map(["raw", $_], qw(PREROUTING OUTPUT))) {
-        comment_block
-            $table_chain->[1] . " chain (" . $table_chain->[0] . " table)";
-        debug "insert(" . $table_chain->[0] . ":" . $table_chain->[1] . ")";
-        insert($table_chain->[0] . ":" . $table_chain->[1]);
-        debug "append(" . $table_chain->[0] . ":" . $table_chain->[1] . ")";
-        append($table_chain->[0] . ":" . $table_chain->[1]);
+        my $label=$table_chain->[0] . ":" . $table_chain->[1];
+
+        if ((defined($conf{'insert'}) and defined($conf{'insert'}->{$label}))
+            or (defined($conf{'append'}) and defined($conf{'append'}->{$label}))) {
+            comment_block
+                $table_chain->[1] . " chain (" . $table_chain->[0] . " table)";
+            debug "insert($label)";
+            insert($label);
+            debug "append($label)";
+            append($label);
+        }
     }
 }
 
