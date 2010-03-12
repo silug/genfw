@@ -79,7 +79,7 @@ for my $rules ("$config_dir/genfw/rules",
     }
 }
 
-exit 0 if (!$rules_found);
+die "No rules found!  Exiting...\n" if (!$rules_found);
 
 for my $name (keys(%interface)) {
     if (grep(/^ignore$/, @{$interface{$name}->{'flags'}})) {

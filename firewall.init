@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# chkconfig: 2345 08 92
+# chkconfig: - 08 92
 #
 # description: Automates a packet filtering firewall with iptables using genfw.
 #
@@ -13,10 +13,6 @@
 . /etc/init.d/functions
 
 modules=/etc/sysconfig/genfw/modules
-
-config=/etc/sysconfig/genfw/rules
-
-[ -f $config ] || exit 0
 
 case "$1" in
   start)
