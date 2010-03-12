@@ -28,6 +28,7 @@ sub icmpfilter($$);
 sub established($$);
 sub drop($$);
 sub accept($$);
+sub acceptnew($$);
 sub filter_from($$);
 sub filter_to($$$);
 sub generate_rules(%);
@@ -207,7 +208,7 @@ sub allow($$@) {
     iptables "-A", label($in) . "-" . label($out),
              "-p", $proto, $port ? ("--dport", $port) : (),
              $from ? ("-s", $from) : (), $to ? ("-d", $to) : (),
-             qw(-j ACCEPT);
+             qw(-j acceptnew);
 }
 
 sub label($) {
@@ -229,18 +230,27 @@ sub generate_rules(%) {
     my %interface=@_;
 
     begin_script;
+
     comment_long "Set default policy to DROP.";
     set_policy("DROP", "DROP", "DROP");
+
     comment_block "Clear all current rules.";
     clear_all;
+
     comment_block "User-defined chains.";
+
     comment_long "Allow established connections.";
     new_chain("established");
     iptables qw(-A established -m state --state), "ESTABLISHED,RELATED",
              qw(-j ACCEPT);
+
     comment_long "Filter ICMP traffic.";
     new_chain("icmp-filter");
     iptables qw(-A icmp-filter -p icmp -j ACCEPT);
+
+    comment_long "Allow new connections.";
+    new_chain("acceptnew");
+    iptables qw(-A acceptnew -m state --state NEW -j ACCEPT);
 
     if (defined($conf{'chain'})) {
         for my $chain (@{$conf{'chains'}}) {
@@ -284,7 +294,7 @@ sub generate_rules(%) {
                      grep /^trusted$/, @{$interface{$in}->{'flags'}})) {
                     debug "append($label)";
                     append($label);
-                    &main::accept($in, $out);
+                    &main::acceptnew($in, $out);
                 } else {
                     check_allowed($in, $out);
                     debug "append($label)";
@@ -316,6 +326,7 @@ sub generate_rules(%) {
             next if (grep(/^ignore$/, @{$interface{$out}->{'flags'}}));
 
             if ($in eq $out) {
+                comment "Allow connections originating from this interface.";
                 iptables("-A", label($in), "-o", $out, "-j", "ACCEPT");
             } else {
                 iptables("-A", label($in), "-o", $out, "-j",
@@ -331,7 +342,9 @@ sub generate_rules(%) {
 
     debug "insert(INPUT)";
     insert("INPUT");
+    comment "Allow established (and related) connections.";
     iptables qw(-A INPUT -j established);
+    comment "Allow traffic to localhost.";
     iptables qw(-A INPUT -i lo -j ACCEPT);
 
     for my $iface (keys(%interface)) {
@@ -520,6 +533,12 @@ sub accept($$) {
     my ($in, $out)=@_;
 
     iptables "-A", label($in) . "-" . label($out), qw(-j ACCEPT);
+}
+
+sub acceptnew($$) {
+    my ($in, $out)=@_;
+
+    iptables "-A", label($in) . "-" . label($out), qw(-j acceptnew);
 }
 
 sub filter_from($$) {
