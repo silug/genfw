@@ -480,6 +480,18 @@ sub generate_rules(%) {
     insert("nat:OUTPUT");
     debug "append(nat:OUTPUT)";
     append("nat:OUTPUT");
+
+    for my $table_chain (
+            map(["mangle", $_],
+                qw(PREROUTING OUTPUT INPUT FORWARD POSTROUTING)),
+            map(["raw", $_], qw(PREROUTING OUTPUT))) {
+        comment_block
+            $table_chain->[1] . " chain (" . $table_chain->[0] . " table)";
+        debug "insert(" . $table_chain->[0] . ":" . $table_chain->[1] . ")";
+        insert($table_chain->[0] . ":" . $table_chain->[1]);
+        debug "append(" . $table_chain->[0] . ":" . $table_chain->[1] . ")";
+        append($table_chain->[0] . ":" . $table_chain->[1]);
+    }
 }
 
 sub icmpfilter($$) {

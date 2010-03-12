@@ -1,8 +1,6 @@
 TODO:
 
     * FIXME - Chain names have a maximum length (30 characters) too
-    * FIXME - We should do something useful with inserted or appended
-              rules in tables other than filter and nat.
     * FIXME - It would probably be good to set the default policy for
               chains in other tables (like nat) to DROP and then add
               explicit rules for accepting packets.
@@ -19,6 +17,12 @@ TODO:
     * FIXME - I'd like to see this work on Debian (at least).
     * FIXME - "append" and "insert" to non-existent chains should give
               an error
+    * FIXME - Related to the last item, we should define the valid
+              built-in chains before reading the rules, that way we can
+              detect adding to a non-existant chain.
+    * FIXME - We should just append/insert our built-in rules before or
+              after reading the rules file(s), then just loop over the
+              defined (and non-empty) chains on output.
 
     * Maybe make generic "int", "out", and "dmz" chains (and combos of
       those) so we can have generic rules for all int-int, int-out, etc.?
