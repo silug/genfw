@@ -48,7 +48,7 @@ sub append($);
 sub action($$);
 sub clear_all();
 
-our $VERSION="1.40";
+our $VERSION="1.41";
 
 our %interface=();
 our %conf=();
