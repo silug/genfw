@@ -237,7 +237,7 @@ sub generate_rules(%) {
     comment_block "Clear all current rules.";
     clear_all;
 
-    comment_block "User-defined chains.";
+    comment_block "genfw-defined chains.";
 
     comment_long "Allow established connections.";
     new_chain("established");
@@ -251,6 +251,8 @@ sub generate_rules(%) {
     comment_long "Allow new connections.";
     new_chain("acceptnew");
     iptables qw(-A acceptnew -m state --state NEW -j ACCEPT);
+
+    comment_block "User-defined chains.";
 
     if (defined($conf{'chain'})) {
         for my $chain (@{$conf{'chains'}}) {
@@ -767,14 +769,14 @@ sub bold($) {
 sub comment_block(@) {
     return if ($opt{'i'});
 
-    print "\n####\n";
+    print "\n####";
     comment_long(@_);
 }
 
 sub comment_long(@) {
     return if ($opt{'i'});
 
-    print "#\n";
+    print "\n#\n";
     comment(@_);
     print "#\n";
 }
@@ -790,7 +792,7 @@ sub comment(@) {
 sub begin_script() {
     return if ($opt{'i'});
 
-    print "#!/bin/sh\n\n";
+    print "#!/bin/sh\n";
 }
 
 sub set_policy($$$) {
