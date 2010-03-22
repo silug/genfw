@@ -1,6 +1,5 @@
 TODO:
 
-    * FIXME - Chain names have a maximum length (30 characters) too
     * FIXME - It would probably be good to set the default policy for
               chains in other tables (like nat) to DROP and then add
               explicit rules for accepting packets.
