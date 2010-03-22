@@ -24,6 +24,18 @@ TODO:
               defined (and non-empty) chains on output.
     * FIXME - Do something useful with stop/reload/condrestart/status
               in the init script.
+    * FIXME - Getting a lot of this message on recent iptables:
+
+              'iptables -t nat -A PREROUTING -i foo -d x/y -j DROP'
+              failed with exit value 2 at /usr/sbin/genfw line 820.
+              iptables v1.4.5: 
+              The "nat" table is not intended for filtering, the use
+              of DROP is therefore inhibited.
+
+
+              Try `iptables -h' or 'iptables --help' for more
+              information.
+
 
     * Maybe make generic "int", "out", and "dmz" chains (and combos of
       those) so we can have generic rules for all int-int, int-out, etc.?
