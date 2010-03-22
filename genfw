@@ -264,17 +264,15 @@ sub generate_rules(%) {
                     # *FIXME* - This also isn't going to work if the *inside*
                     # interface is dynamically assigned, although that just
                     # wouldn't usually make a hell of a lot of sense...
+                    my @rule=("-o", $out, "-s",
+                              $cfg->{'network'} . "/" . $cfg->{'netmask'});
                     if (defined($interface{$out}->{'cfg'}->[0]->{'ipaddr'})) {
                         unshift(@{$conf{'append'}->{'nat:POSTROUTING'}},
-                            ["-o", $out, "-s",
-                             $cfg->{'network'} . "/" . $cfg->{'netmask'},
-                             qw(-j SNAT --to),
+                            [@rule, qw(-j SNAT --to),
                              $interface{$out}->{'cfg'}->[0]->{'ipaddr'}]);
                     } else {
                         unshift(@{$conf{'append'}->{'nat:POSTROUTING'}},
-                            ["-o", $out, "-s",
-                             $cfg->{'network'} . "/" . $cfg->{'netmask'},
-                             qw(-j MASQUERADE)]);
+                            [@rule, qw(-j MASQUERADE)]);
                     }
                 }
             }
