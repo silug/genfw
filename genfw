@@ -229,6 +229,25 @@ sub label($) {
 sub generate_rules(%) {
     my %interface=@_;
 
+    # Check chain name lengths.  Error out if they're too long.
+    for my $in (keys(%interface)) {
+        next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
+
+        for my $out (keys(%interface)) {
+            next if ($in eq $out
+                     or grep /^ignore$/, @{$interface{$out}->{'flags'}});
+
+            my $maxlength=30;
+
+            my $name=label($in) . "-" . label($out);
+
+            if (length($name) > $maxlength) {
+                die "Chain name '$name' is more than $maxlength characters.\n"
+                    . "Invalid configuration detected.  Exiting!\n";
+            }
+        }
+    }
+
     # Build NAT (POSTROUTING) rules.
     for my $in (keys(%interface)) {
         next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
