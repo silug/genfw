@@ -1010,6 +1010,10 @@ See L</append> above.
 This creates a chain named I<name> in the specified I<table> (for use with
 C<append> and C<insert>).
 
+=item C<policy> [I<table>:]I<name> I<target>
+
+Set the policy for the chain I<name> (I<table> table) to I<target>.
+
 =item C<no logging>
 
 Modifies generated rules so that dropped packets are not logged.
