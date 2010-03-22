@@ -317,13 +317,13 @@ sub generate_rules(%) {
                 # subnet correctly (without adding additional rules)
                 my @rule=("-i", $in, "-d",
                           $cfg->{'network'} . "/" . $cfg->{'netmask'});
-                unshift(@{$conf{'append'}->{'nat:PREROUTING'}},
+                unshift(@{$conf{'append'}->{'mangle:PREROUTING'}},
+                    [@rule, qw(-j DROP)]);
+                unshift(@{$conf{'append'}->{'mangle:PREROUTING'}},
                     [@rule, @{$conf{'log'}}, "--log-prefix",
                         sprintf("%.29s",
                             label($in) . " -> " . label($out) . ": bad dest: ")])
                     if (@{$conf{'log'}});
-                unshift(@{$conf{'append'}->{'nat:PREROUTING'}},
-                    [@rule, qw(-j DROP)]);
             }
         }
     }
