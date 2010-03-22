@@ -298,7 +298,7 @@ sub generate_rules(%) {
             for my $cfg (@{$interface{$out}->{'cfg'}}) {
                 # *FIXME* - need to handle aliased interfaces on the same
                 # subnet correctly (without adding additional rules)
-                my @rule=(qw(-t nat -A PREROUTING -i), $in, "-d",
+                my @rule=("-i", $in, "-d",
                           $cfg->{'network'} . "/" . $cfg->{'netmask'});
                 unshift(@{$conf{'append'}->{'nat:PREROUTING'}},
                     [@rule, @{$conf{'log'}}, "--log-prefix",
