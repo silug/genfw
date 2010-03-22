@@ -41,7 +41,7 @@ sub comment_block(@);
 sub comment_long(@);
 sub comment(@);
 sub begin_script();
-sub set_policy($$$);
+sub set_policy($);
 sub iptables(@);
 sub new_chain($);
 sub insert($);
@@ -70,6 +70,24 @@ if (defined($ENV{'DEBUG'}) || $opt{'d'}) {
 
 # Default
 $conf{'log'}=[qw(-m limit -j LOG)];
+
+$conf{'policy'}={
+        'INPUT'         => 'DROP',
+        'OUTPUT'        => 'ACCEPT',
+        'FORWARD'       => 'DROP',
+    };
+
+$conf{'genfw_chains'}=[
+        'established',
+        'icmp-filter',
+        'acceptnew',
+    ];
+
+$conf{'chain'}={
+        'established'   => "Allow established connections.",
+        'icmp-filter'   => "Filter ICMP traffic.",
+        'acceptnew'     => "Allow new connections.",
+    };
 
 my $rules_found=0;
 for my $rules ("$config_dir/genfw/rules",
@@ -328,28 +346,89 @@ sub generate_rules(%) {
         }
     }
 
+    # Set default actions for our built-in chains.
+    unshift(@{$conf{'append'}->{'established'}},
+            [qw(-m state --state), "ESTABLISHED,RELATED", qw(-j ACCEPT)]);
+    unshift(@{$conf{'append'}->{'icmp-filter'}}, [qw(-p icmp -j ACCEPT)]);
+    unshift(@{$conf{'append'}->{'acceptnew'}},
+            [qw(-m state --state NEW -j ACCEPT)]);
+
+    # Set default actions for iptables built-in chains.
+    # INPUT
+    my @input_rules=(
+            [qw(-j established)], # Allow established (and related) connections.
+            [qw(-i lo -j ACCEPT)], # Allow traffic to localhost.
+            [qw(-p tcp --dport 113 -j REJECT --reject-with tcp-reset)], # ident
+            [qw(-p udp --dport 113 -j REJECT),
+             qw(--reject-with icmp-port-unreachable)], # ident
+            [qw(-j icmp-filter)], # ICMP
+        );
+
+    for my $iface (keys(%interface)) {
+        next if (grep /^ignore$/, @{$interface{$iface}->{'flags'}});
+
+        if (($interface{$iface}->{'type'} eq "int") &&
+            grep /^trusted$/, @{$interface{$iface}->{'flags'}}) {
+            push(@input_rules, ["-i", $iface, "-j", "ACCEPT"]);
+        }
+    }
+
+    push(@input_rules,
+        [@{$conf{'log'}}, "--log-prefix", "INPUT fall-through: "])
+        if (@{$conf{'log'}} and $conf{'policy'}->{'INPUT'} eq "DROP");
+
+    unshift(@{$conf{'append'}->{'INPUT'}}, @input_rules);
+
+    # OUTPUT
+    my @output_rules=(
+            [qw(-j established)], # Allow established (and related) connections.
+            [qw(-j icmp-filter)], # ICMP
+        );
+
+    push(@output_rules,
+        [@{$conf{'log'}}, "--log-prefix", "OUTPUT fall-through: "])
+        if (@{$conf{'log'}} and $conf{'policy'}->{'OUTPUT'} eq "DROP");
+
+    unshift(@{$conf{'append'}->{'OUTPUT'}}, @output_rules);
+
+    # FORWARD
+    my @forward_rules=(
+           #[qw(-j established)], # Allow established (and related) connections.
+        );
+
+    for my $in (keys(%interface)) {
+        next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
+
+        push(@forward_rules, ["-i", $in, "-j", label($in)]);
+    }
+
+    push(@forward_rules,
+        [@{$conf{'log'}}, "--log-prefix", "FORWARD fall-through: "])
+        if (@{$conf{'log'}} and $conf{'policy'}->{'FORWARD'} eq "DROP");
+
+    unshift(@{$conf{'append'}->{'FORWARD'}}, @forward_rules);
+    
+    # Start output...
     begin_script;
 
-    comment_long "Set default policy to DROP.";
-    set_policy("DROP", "DROP", "DROP");
+    comment_long "Set default policies.";
+    set_policy($conf{'policy'});
 
     comment_block "Clear all current rules.";
     clear_all;
 
     comment_block "genfw-defined chains.";
 
-    comment_long "Allow established connections.";
-    new_chain("established");
-    iptables qw(-A established -m state --state), "ESTABLISHED,RELATED",
-             qw(-j ACCEPT);
-
-    comment_long "Filter ICMP traffic.";
-    new_chain("icmp-filter");
-    iptables qw(-A icmp-filter -p icmp -j ACCEPT);
-
-    comment_long "Allow new connections.";
-    new_chain("acceptnew");
-    iptables qw(-A acceptnew -m state --state NEW -j ACCEPT);
+    for my $chain (@{$conf{'genfw_chains'}}) {
+        if (length($conf{'chain'}->{$chain})) {
+            comment_long $conf{'chain'}->{$chain};
+        } else {
+            comment_long $chain;
+        }
+        new_chain($chain);
+        insert($chain);
+        append($chain);
+    }
 
     comment_block "User-defined chains.";
 
@@ -439,69 +518,14 @@ sub generate_rules(%) {
         append(label($in));
     }
 
-    comment_block("INPUT chain.");
-
-    debug "insert(INPUT)";
-    insert("INPUT");
-    comment "Allow established (and related) connections.";
-    iptables qw(-A INPUT -j established);
-    comment "Allow traffic to localhost.";
-    iptables qw(-A INPUT -i lo -j ACCEPT);
-
-    for my $iface (keys(%interface)) {
-        next if (grep /^ignore$/, @{$interface{$iface}->{'flags'}});
-
-        if (($interface{$iface}->{'type'} eq "int") &&
-            grep /^trusted$/, @{$interface{$iface}->{'flags'}}) {
-            iptables("-A", "INPUT", "-i", $iface, "-j", "ACCEPT");
-        }
-    }
-
-    debug "append(INPUT)";
-    append("INPUT");
-
-    iptables qw(-A INPUT -p tcp --dport 113 -j REJECT --reject-with tcp-reset);
-    iptables qw(-A INPUT -p udp --dport 113 -j REJECT),
-             qw(--reject-with icmp-port-unreachable);
-    iptables qw(-A INPUT -j icmp-filter);
-
-    iptables qw(-A INPUT), @{$conf{'log'}}, "--log-prefix",
-             "INPUT fall-through: "
-        if (@{$conf{'log'}});
-    iptables qw(-A INPUT -j DROP);
-
-    comment_block("OUTPUT chain.");
-    debug "insert(OUTPUT)";
-    insert("OUTPUT");
-    debug "append(OUTPUT)";
-    append("OUTPUT");
-    iptables qw(-A OUTPUT -j ACCEPT);
-
-    comment_block("FORWARD chain.");
-
-    debug "insert(FORWARD)";
-    insert("FORWARD");
-
-    for my $in (keys(%interface)) {
-        next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
-
-        iptables qw(-A FORWARD -i), $in, "-j", label($in);
-    }
-
-    debug "append(FORWARD)";
-    append("FORWARD");
-
-    iptables qw(-A FORWARD), @{$conf{'log'}}, "--log-prefix",
-             "FORWARD fall-through: "
-        if (@{$conf{'log'}});
-    iptables qw(-A FORWARD -j DROP);
-
     for my $table_chain (
+            map(["filter", $_], qw(INPUT OUTPUT FORWARD)),
             map(["nat", $_], qw(POSTROUTING PREROUTING OUTPUT)),
             map(["mangle", $_],
                 qw(PREROUTING OUTPUT INPUT FORWARD POSTROUTING)),
             map(["raw", $_], qw(PREROUTING OUTPUT))) {
-        my $label=$table_chain->[0] . ":" . $table_chain->[1];
+        my $label=$table_chain->[0] eq "filter"
+            ? $table_chain->[1] : ($table_chain->[0] . ":" . $table_chain->[1]);
 
         next unless ((defined($conf{'insert'})
                 and defined($conf{'insert'}->{$label}))
@@ -677,6 +701,12 @@ sub parserules($) {
             $parts[0]=~s/^filter://;
             push(@{$conf{$parts[0]}->{$parts[1]}}, [@parts[2..$#parts]]);
         } elsif ($parts[0] eq "chain" and defined($parts[1])) {
+            if ($conf{$parts[0]}
+                and grep { $parts[1] eq $_ } keys(%{$conf{$parts[0]}})) {
+                warn "Not re-declaring chain '$parts[1]'!\n";
+                next;
+            }
+
             if (@parts>2) {
                 $conf{$parts[0]}->{$parts[1]}="@parts[2 .. $#parts]";
             } else {
@@ -689,6 +719,10 @@ sub parserules($) {
                                     : "$config_dir/genfw/$parts[1]")) {
                 parserules($rule_file) if (-e $rule_file);
             }
+        } elsif ($parts[0] eq "policy" and scalar(@parts) == 3) {
+            warn "Bad $parts[1] policy target '$parts[2]'\n"
+                unless ($parts[2] =~ /^(ACCEPT|DROP|QUEUE|RETURN)$/);
+            $conf{$parts[0]}->{$parts[1]}=$parts[2];
         } else {
             warn "Skipping bogus line ($.):\n\t$_\n";
             next;
@@ -803,11 +837,18 @@ sub begin_script() {
     print "#!/bin/sh\n";
 }
 
-sub set_policy($$$) {
-    my @chain=("INPUT", "OUTPUT", "FORWARD");
+sub set_policy($) {
+    my $policy=shift;
 
-    for (my $n=0;$n<@chain;$n++) {
-        iptables("-P", $chain[$n], $_[$n]);
+    for my $chain (keys %{$policy}) {
+        if ($chain=~/^([^:]+):(.+)$/) {
+            my $table=$1;
+            $chain=$2;
+
+            iptables("-t", $table, "-P", $chain, $policy->{$chain});
+        } else {
+            iptables("-P", $chain, $policy->{$chain});
+        }
     }
 }
 

@@ -19,9 +19,6 @@ TODO:
     * FIXME - Related to the last item, we should define the valid
               built-in chains before reading the rules, that way we can
               detect adding to a non-existant chain.
-    * FIXME - We should just append/insert our built-in rules before or
-              after reading the rules file(s), then just loop over the
-              defined (and non-empty) chains on output.
     * FIXME - Do something useful with stop/reload/condrestart/status
               in the init script.
 
