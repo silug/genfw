@@ -486,15 +486,17 @@ sub generate_rules(%) {
             map(["raw", $_], qw(PREROUTING OUTPUT))) {
         my $label=$table_chain->[0] . ":" . $table_chain->[1];
 
-        if ((defined($conf{'insert'}) and defined($conf{'insert'}->{$label}))
-            or (defined($conf{'append'}) and defined($conf{'append'}->{$label}))) {
-            comment_block
-                $table_chain->[1] . " chain (" . $table_chain->[0] . " table)";
-            debug "insert($label)";
-            insert($label);
-            debug "append($label)";
-            append($label);
-        }
+        next unless ((defined($conf{'insert'})
+                and defined($conf{'insert'}->{$label}))
+            or (defined($conf{'append'})
+                and defined($conf{'append'}->{$label})));
+
+        comment_block
+            $table_chain->[1] . " chain (" . $table_chain->[0] . " table)";
+        debug "insert($label)";
+        insert($label);
+        debug "append($label)";
+        append($label);
     }
 }
 
