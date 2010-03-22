@@ -871,6 +871,8 @@ sub clear_all() {
     iptables qw(-t nat -X);
     iptables qw(-t mangle -F);
     iptables qw(-t mangle -X);
+    iptables qw(-t raw -F);
+    iptables qw(-t raw -X);
     iptables "-Z";
 }
 
