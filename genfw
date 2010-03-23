@@ -357,6 +357,7 @@ sub generate_rules(%) {
     # INPUT
     my @input_rules_early=(
             [qw(-j established)], # Allow established (and related) connections.
+            [qw(-i lo -j ACCEPT)], # Allow traffic to localhost.
         );
 
     for my $iface (keys(%interface)) {
@@ -371,7 +372,6 @@ sub generate_rules(%) {
     unshift(@{$conf{'append'}->{'INPUT'}}, @input_rules_early);
 
     my @input_rules_late=(
-            [qw(-i lo -j ACCEPT)], # Allow traffic to localhost.
             [qw(-p tcp --dport 113 -j REJECT --reject-with tcp-reset)], # ident
             [qw(-p udp --dport 113 -j REJECT),
              qw(--reject-with icmp-port-unreachable)], # ident
