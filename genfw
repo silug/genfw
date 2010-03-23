@@ -489,7 +489,8 @@ sub generate_rules(%) {
                      grep /^trusted$/, @{$interface{$in}->{'flags'}})) {
                     debug "append($label)";
                     append($label);
-                    &main::acceptnew($in, $out);
+                    established($in, $out);
+                    acceptnew($in, $out);
                 } else {
                     check_allowed($in, $out);
                     debug "append($label)";
