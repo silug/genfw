@@ -49,7 +49,7 @@ sub append($);
 sub action($$);
 sub clear_all();
 
-our $VERSION="1.44";
+our $VERSION="1.45";
 
 our %interface=();
 our %conf=();
