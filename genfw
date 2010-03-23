@@ -373,11 +373,11 @@ sub generate_rules(%) {
         }
     }
 
-    push(@input_rules,
+    unshift(@{$conf{'append'}->{'INPUT'}}, @input_rules);
+
+    push(@{$conf{'append'}->{'INPUT'}},
         [@{$conf{'log'}}, "--log-prefix", "INPUT fall-through: "])
         if (@{$conf{'log'}} and $conf{'policy'}->{'INPUT'} eq "DROP");
-
-    unshift(@{$conf{'append'}->{'INPUT'}}, @input_rules);
 
     # OUTPUT
     my @output_rules=(
@@ -385,11 +385,11 @@ sub generate_rules(%) {
             [qw(-j icmp-filter)], # ICMP
         );
 
-    push(@output_rules,
+    unshift(@{$conf{'append'}->{'OUTPUT'}}, @output_rules);
+
+    push(@{$conf{'append'}->{'OUTPUT'}},
         [@{$conf{'log'}}, "--log-prefix", "OUTPUT fall-through: "])
         if (@{$conf{'log'}} and $conf{'policy'}->{'OUTPUT'} eq "DROP");
-
-    unshift(@{$conf{'append'}->{'OUTPUT'}}, @output_rules);
 
     # FORWARD
     my @forward_rules=(
@@ -402,11 +402,11 @@ sub generate_rules(%) {
         push(@forward_rules, ["-i", $in, "-j", label($in)]);
     }
 
-    push(@forward_rules,
+    unshift(@{$conf{'append'}->{'FORWARD'}}, @forward_rules);
+
+    push(@{$conf{'append'}->{'FORWARD'}},
         [@{$conf{'log'}}, "--log-prefix", "FORWARD fall-through: "])
         if (@{$conf{'log'}} and $conf{'policy'}->{'FORWARD'} eq "DROP");
-
-    unshift(@{$conf{'append'}->{'FORWARD'}}, @forward_rules);
     
     # Start output...
     begin_script;
