@@ -355,13 +355,8 @@ sub generate_rules(%) {
 
     # Set default actions for iptables built-in chains.
     # INPUT
-    my @input_rules=(
+    my @input_rules_early=(
             [qw(-j established)], # Allow established (and related) connections.
-            [qw(-i lo -j ACCEPT)], # Allow traffic to localhost.
-            [qw(-p tcp --dport 113 -j REJECT --reject-with tcp-reset)], # ident
-            [qw(-p udp --dport 113 -j REJECT),
-             qw(--reject-with icmp-port-unreachable)], # ident
-            [qw(-j icmp-filter)], # ICMP
         );
 
     for my $iface (keys(%interface)) {
@@ -369,44 +364,64 @@ sub generate_rules(%) {
 
         if (($interface{$iface}->{'type'} eq "int") &&
             grep /^trusted$/, @{$interface{$iface}->{'flags'}}) {
-            push(@input_rules, ["-i", $iface, "-j", "ACCEPT"]);
+            push(@input_rules_early, ["-i", $iface, "-j", "ACCEPT"]);
         }
     }
 
-    unshift(@{$conf{'append'}->{'INPUT'}}, @input_rules);
+    unshift(@{$conf{'append'}->{'INPUT'}}, @input_rules_early);
 
-    push(@{$conf{'append'}->{'INPUT'}},
-        [@{$conf{'log'}}, "--log-prefix", "INPUT fall-through: "])
-        if (@{$conf{'log'}} and $conf{'policy'}->{'INPUT'} eq "DROP");
-
-    # OUTPUT
-    my @output_rules=(
-            [qw(-j established)], # Allow established (and related) connections.
+    my @input_rules_late=(
+            [qw(-i lo -j ACCEPT)], # Allow traffic to localhost.
+            [qw(-p tcp --dport 113 -j REJECT --reject-with tcp-reset)], # ident
+            [qw(-p udp --dport 113 -j REJECT),
+             qw(--reject-with icmp-port-unreachable)], # ident
             [qw(-j icmp-filter)], # ICMP
         );
 
-    unshift(@{$conf{'append'}->{'OUTPUT'}}, @output_rules);
+    push(@input_rules_late,
+        [@{$conf{'log'}}, "--log-prefix", "INPUT fall-through: "])
+        if (@{$conf{'log'}} and $conf{'policy'}->{'INPUT'} eq "DROP");
 
-    push(@{$conf{'append'}->{'OUTPUT'}},
+    push(@{$conf{'append'}->{'INPUT'}}, @input_rules_late);
+
+    # OUTPUT
+    my @output_rules_early=(
+            [qw(-j established)], # Allow established (and related) connections.
+        );
+
+    unshift(@{$conf{'append'}->{'OUTPUT'}}, @output_rules_early);
+
+    my @output_rules_late=(
+            [qw(-j icmp-filter)], # ICMP
+        );
+
+    push(@output_rules_late,
         [@{$conf{'log'}}, "--log-prefix", "OUTPUT fall-through: "])
         if (@{$conf{'log'}} and $conf{'policy'}->{'OUTPUT'} eq "DROP");
 
+    push(@{$conf{'append'}->{'OUTPUT'}}, @output_rules_late);
+
     # FORWARD
-    my @forward_rules=(
+    my @forward_rules_early=(
            #[qw(-j established)], # Allow established (and related) connections.
         );
 
     for my $in (keys(%interface)) {
         next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
 
-        push(@forward_rules, ["-i", $in, "-j", label($in)]);
+        push(@forward_rules_early, ["-i", $in, "-j", label($in)]);
     }
 
-    unshift(@{$conf{'append'}->{'FORWARD'}}, @forward_rules);
+    unshift(@{$conf{'append'}->{'FORWARD'}}, @forward_rules_early);
 
-    push(@{$conf{'append'}->{'FORWARD'}},
+    my @forward_rules_late=(
+        );
+
+    push(@forward_rules_late,
         [@{$conf{'log'}}, "--log-prefix", "FORWARD fall-through: "])
         if (@{$conf{'log'}} and $conf{'policy'}->{'FORWARD'} eq "DROP");
+
+    push(@{$conf{'append'}->{'FORWARD'}}, @forward_rules_late);
     
     # Start output...
     begin_script;
