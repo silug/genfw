@@ -784,7 +784,8 @@ sub parseconfig($$) {
     }
 
     if (%cfg) {
-        if ($cfg{'bootproto'} eq 'none' or $cfg{'bootproto'} eq 'static') {
+        if (!exists($cfg{'bootproto'}) or !defined($cfg{'bootproto'})
+            or $cfg{'bootproto'} eq 'none' or $cfg{'bootproto'} eq 'static') {
             my $network=inet_ntoa(inet_aton($cfg{'ipaddr'})
                                   & inet_aton($cfg{'netmask'}));
             my $broadcast=inet_ntoa(inet_aton($cfg{'ipaddr'})
