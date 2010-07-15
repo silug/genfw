@@ -24,3 +24,42 @@ TODO:
 
     * Maybe make generic "int", "out", and "dmz" chains (and combos of
       those) so we can have generic rules for all int-int, int-out, etc.?
+    * Add some extra security in the mangle table:
+      - Filter out connections to internal addresses from outside interfaces
+        that should be NATing.
+      - Filter out connections from internal addresses on outside interfaces
+        (which should be handled by rp_filter, but still...).
+      - Filter out invalid TCP:
+        * All bits are cleared
+
+          -p tcp --tcp-flags ALL NONE
+
+        * SYN & FIN are both set
+        
+          -p tcp --tcp-flags SYN,FIN SYN,FIN
+
+        * SYN & RST are both set
+        
+          -p tcp --tcp-flags SYN,RST SYN,RST
+
+        * FIN & RST are both set
+        
+          -p tcp --tcp-flags FIN,RST FIN,RST
+
+        * FIN is the only bit set, without the expected accompanying ACK
+          (implicitly includes 'xmastree' packets containing FIN-PSH, FIN-
+          URG, and FIN-PSH-URG)
+
+          -p tcp --tcp-flags ACK,FIN FIN
+
+        * PSH is the only bit set, without the expected accompanying ACK
+
+          -p tcp --tcp-flags ACK,PSH PSH
+
+        * URG is the only bit set, without the expected accompanying ACK
+
+          -p tcp --tcp-flags ACK,URG URG
+
+        * INVALID?
+
+          -m state --state INVALID
