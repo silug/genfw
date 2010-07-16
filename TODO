@@ -25,11 +25,13 @@ TODO:
     * Maybe make generic "int", "out", and "dmz" chains (and combos of
       those) so we can have generic rules for all int-int, int-out, etc.?
     * Add some extra security in the mangle table:
+
       - Filter out connections to internal addresses from outside interfaces
         that should be NATing.
       - Filter out connections from internal addresses on outside interfaces
         (which should be handled by rp_filter, but still...).
-      - Filter out invalid TCP:
+      - Filter out invalid TCP and other bad stuff:
+
         * All bits are cleared
 
           -p tcp --tcp-flags ALL NONE
@@ -63,3 +65,20 @@ TODO:
         * INVALID?
 
           -m state --state INVALID
+
+        * Bogon filtering?
+
+          Example at http://www.stearns.org/modwall/sample/bogons-sample
+
+        * TTL normalization?
+
+          -m ttl --ttl-gt 36 -j TTL --ttl-set 64 (as an example)
+
+        * Add some chains of random bad things, but don't call them
+          anywhere, just so they'd be handy if anyone wanted to use them?
+
+        * Adding a flag to set what networks are allowed for source
+          addresses on a given interface would let us filter and NAT
+          automatically.
+
+    * ip6tables support
