@@ -495,8 +495,8 @@ sub generate_rules(%) {
                     check_allowed($in, $out);
                     debug "append($label)";
                     append($label);
-                    icmpfilter($in, $out);
                     established($in, $out);
+                    icmpfilter($in, $out);
                     reject_auth($in, $out);
                     drop($in, $out);
                 }
