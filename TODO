@@ -82,3 +82,5 @@ TODO:
           automatically.
 
     * ip6tables support
+    * Give all interfaces a numeric value and base our default accept/drop
+      decision on that.
