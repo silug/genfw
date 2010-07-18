@@ -78,15 +78,15 @@ $conf{'policy'}={
     };
 
 $conf{'genfw_chains'}=[
+        'acceptnew',
         'established',
         'icmp-filter',
-        'acceptnew',
     ];
 
 $conf{'chain'}={
+        'acceptnew'     => "Allow new connections.",
         'established'   => "Allow established connections.",
         'icmp-filter'   => "Filter ICMP traffic.",
-        'acceptnew'     => "Allow new connections.",
     };
 
 my $rules_found=0;
@@ -347,11 +347,11 @@ sub generate_rules(%) {
     }
 
     # Set default actions for our built-in chains.
-    unshift(@{$conf{'append'}->{'established'}},
-            [qw(-m state --state), "ESTABLISHED,RELATED", qw(-j ACCEPT)]);
-    unshift(@{$conf{'append'}->{'icmp-filter'}}, [qw(-p icmp -j ACCEPT)]);
     unshift(@{$conf{'append'}->{'acceptnew'}},
             [qw(-m state --state NEW -j ACCEPT)]);
+    unshift(@{$conf{'append'}->{'established'}},
+            [qw(-m state --state), "ESTABLISHED,RELATED", qw(-j ACCEPT)]);
+    unshift(@{$conf{'append'}->{'icmp-filter'}}, [qw(-p icmp -j acceptnew)]);
 
     # Set default actions for iptables built-in chains.
     # INPUT
