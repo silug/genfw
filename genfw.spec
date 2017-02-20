@@ -1,5 +1,5 @@
 Name:		genfw
-Version:	%(perl -MExtUtils::MakeMaker -le 'print ExtUtils::MM_Unix::parse_version("", "genfw")')
+Version:	%(perl -MExtUtils::MakeMaker -le 'print ExtUtils::MM->parse_version("genfw")')
 Release:	1
 URL:		http://www.kspei.com/projects/genfw/
 Source0:	http://ftp.kspei.com/pub/steve/genfw/%{name}-%{version}.tar.gz
