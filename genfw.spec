@@ -43,14 +43,6 @@ cp genfw.8 %{buildroot}/%{_mandir}/man8/genfw.8
 %clean
 rm -rf %{buildroot}
 
-%preun
-if [ "$1" = 0 ]; then
-    chkconfig --del firewall
-fi
-
-%post
-chkconfig --add firewall
-
 %files
 %defattr(-,root,root)
 %dir %{_sysconfdir}/sysconfig/genfw
