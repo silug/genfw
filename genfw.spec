@@ -15,7 +15,7 @@ Requires:       perl(FileHandle)
 Requires:       perl(DirHandle)
 Requires:       perl(Socket)
 Requires:       perl(Getopt::Std)
-Requires:       chkconfig
+Requires:       systemd-units
 
 %description
 genfw automates much of the work of building an iptables-based
@@ -29,13 +29,13 @@ firewall by using a simple text-based configuration file.
 %install
 [ "%{buildroot}" = "/" -o -z "%{buildroot}" ] && exit 1
 rm -rf %{buildroot}
-mkdir -p %{buildroot}/%{_initrddir} \
+mkdir -p %{buildroot}/%{_unitdir} \
          %{buildroot}/%{_sysconfdir}/sysconfig/genfw \
          %{buildroot}/%{_sbindir} \
          %{buildroot}/%{_mandir}/man8
 
 cp genfw %{buildroot}/%{_sbindir}/genfw
-cp firewall.init %{buildroot}/%{_initrddir}/firewall
+cp genfw.service %{buildroot}/%{_unitdir}/
 
 pod2man genfw > genfw.8
 cp genfw.8 %{buildroot}/%{_mandir}/man8/genfw.8
@@ -54,11 +54,17 @@ chkconfig --add firewall
 %files
 %defattr(-,root,root)
 %dir %{_sysconfdir}/sysconfig/genfw
-%config %{_initrddir}/firewall
+%config %{_unitdir}/genfw.service
 %{_sbindir}/genfw
 %{_mandir}/man8/genfw.8*
 
 %changelog
+* Sun Feb 19 2017 Steven Pritchard <steve@kspei.com> 1.49
+- Add systemd unit
+
+* Sun Feb 19 2017 Steven Pritchard <steve@kspei.com> 1.48
+- Fix parse_version() call
+
 * Mon Apr 14 2003 Steven Pritchard <steve@kspei.com> 1.28
 - Cleanup
 

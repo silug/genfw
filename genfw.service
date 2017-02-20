@@ -1,0 +1,9 @@
+[Unit]
+Description=Configure firewall using genfw
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/genfw -i
+
+[Install]
+WantedBy=network.target
