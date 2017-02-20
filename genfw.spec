@@ -1,21 +1,21 @@
-Name:		genfw
-Version:	%(perl -MExtUtils::MakeMaker -le 'print ExtUtils::MM->parse_version("genfw")')
-Release:	1
-URL:		http://www.kspei.com/projects/genfw/
-Source0:	http://ftp.kspei.com/pub/steve/genfw/%{name}-%{version}.tar.gz
-Group:		System Environment/Base
-License:	GPL
-BuildRoot:	%{_tmppath}/%{name}-%{version}
-Summary:	Tool for building iptables-based firewalls.
-BuildArch:	noarch
-BuildRequires:	perl
-Requires:	iptables
-Requires:	perl
-Requires:	perl(FileHandle)
-Requires:	perl(DirHandle)
-Requires:	perl(Socket)
-Requires:	perl(Getopt::Std)
-Requires:	chkconfig
+Name:           genfw
+Version:        %(perl -MExtUtils::MakeMaker -le 'print ExtUtils::MM->parse_version("genfw")')
+Release:        1
+URL:            http://www.kspei.com/projects/genfw/
+Source0:        http://ftp.kspei.com/pub/steve/genfw/%{name}-%{version}.tar.gz
+Group:          System Environment/Base
+License:        GPL
+BuildRoot:      %{_tmppath}/%{name}-%{version}
+Summary:        Tool for building iptables-based firewalls.
+BuildArch:      noarch
+BuildRequires:  perl
+Requires:       iptables
+Requires:       perl
+Requires:       perl(FileHandle)
+Requires:       perl(DirHandle)
+Requires:       perl(Socket)
+Requires:       perl(Getopt::Std)
+Requires:       chkconfig
 
 %description
 genfw automates much of the work of building an iptables-based
