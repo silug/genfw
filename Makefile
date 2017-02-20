@@ -8,7 +8,7 @@ install:
 	./install.sh
 
 dist:
-	rm -rf genfw-$(VERSION) genfw-$(VERSION).tar.gz genfw-$(VERSION)-*.src.rpm
+	rm -rf genfw-$(VERSION) genfw-$(VERSION).tar.gz* genfw-$(VERSION)-*.src.rpm
 	mkdir genfw-$(VERSION)
 	cp $(FILES) genfw-$(VERSION)/
 	tar -zcvf genfw-$(VERSION).tar.gz genfw-$(VERSION)
