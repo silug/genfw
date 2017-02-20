@@ -812,7 +812,7 @@ sub parseconfig($$) {
 }
 
 sub debug(@) {
-    return if (!defined($ENV{'DEBUG'}));
+    return unless (defined($ENV{'DEBUG'}) || $opt{'d'});
     if (!@_) {
         print STDERR "\n";
     } else {
