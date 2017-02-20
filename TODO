@@ -82,5 +82,9 @@ TODO:
           automatically.
 
     * ip6tables support
+    * ebtables support (or is that not really necessary now?)
     * Give all interfaces a numeric value and base our default accept/drop
-      decision on that.
+      decision on that.  (Fine-tuning the current inside/DMZ/outside model.)
+    * Rewrite configuration to allow for ranges of ports, IPv6 addresses,
+      etc. that might use ":".  Maybe switch to YAML?  (Must support old
+      configuration format or provide an easy way to upgrade.)
