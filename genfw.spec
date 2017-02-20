@@ -1,20 +1,18 @@
 Name:           genfw
-Version:        %(perl -MExtUtils::MakeMaker -le 'print ExtUtils::MM->parse_version("genfw")')
-Release:        1
+Version:        1.49
+Release:        1%{?dist}
 URL:            http://www.kspei.com/projects/genfw/
 Source0:        http://ftp.kspei.com/pub/steve/genfw/%{name}-%{version}.tar.gz
 Group:          System Environment/Base
 License:        GPL
-BuildRoot:      %{_tmppath}/%{name}-%{version}
 Summary:        Tool for building iptables-based firewalls.
 BuildArch:      noarch
 BuildRequires:  perl
+BuildRequires:  /usr/bin/pod2man
+BuildRequires:  systemd
+BuildRequires:  perl-generators
 Requires:       iptables
-Requires:       perl
-Requires:       perl(FileHandle)
-Requires:       perl(DirHandle)
-Requires:       perl(Socket)
-Requires:       perl(Getopt::Std)
+Requires:       perl(Data::Dumper)
 Requires:       systemd-units
 
 %description
@@ -25,23 +23,17 @@ firewall by using a simple text-based configuration file.
 %setup -q
 
 %build
+pod2man genfw > genfw.8
 
 %install
-[ "%{buildroot}" = "/" -o -z "%{buildroot}" ] && exit 1
-rm -rf %{buildroot}
 mkdir -p %{buildroot}/%{_unitdir} \
          %{buildroot}/%{_sysconfdir}/sysconfig/genfw \
          %{buildroot}/%{_sbindir} \
          %{buildroot}/%{_mandir}/man8
 
-cp genfw %{buildroot}/%{_sbindir}/genfw
-cp genfw.service %{buildroot}/%{_unitdir}/
-
-pod2man genfw > genfw.8
-cp genfw.8 %{buildroot}/%{_mandir}/man8/genfw.8
-
-%clean
-rm -rf %{buildroot}
+install -m 755 genfw %{buildroot}/%{_sbindir}/genfw
+install -m 644 genfw.service %{buildroot}/%{_unitdir}/
+install -m 644 genfw.8 %{buildroot}/%{_mandir}/man8/genfw.8
 
 %files
 %defattr(-,root,root)
@@ -51,8 +43,10 @@ rm -rf %{buildroot}
 %{_mandir}/man8/genfw.8*
 
 %changelog
-* Sun Feb 19 2017 Steven Pritchard <steve@kspei.com> 1.49
+* Mon Feb 20 2017 Steven Pritchard <steve@kspei.com> 1.49
 - Add systemd unit
+- Modernize spec
+- Hard-code Version to eliminate mock build problem
 
 * Sun Feb 19 2017 Steven Pritchard <steve@kspei.com> 1.48
 - Fix parse_version() call
