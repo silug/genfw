@@ -1,5 +1,5 @@
 Name:           genfw
-Version:        1.49
+Version:        1.50
 Release:        1%{?dist}
 URL:            http://www.kspei.com/projects/genfw/
 Source0:        http://ftp.kspei.com/pub/steve/genfw/%{name}-%{version}.tar.gz
