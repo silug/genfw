@@ -285,7 +285,8 @@ sub generate_rules(%) {
                         or !@{$interface{$iface}->{'cfg'}}) {
                         debug "I have no configuration for interface $iface!\n";
                         # FIXME: "nat" on undefined interface breaks everything.
-                        return;
+                        warn "No configuration found for interface $iface.\n";
+                        next;
                     }
                 }
 
