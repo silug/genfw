@@ -43,6 +43,9 @@ install -m 644 genfw.8 %{buildroot}/%{_mandir}/man8/genfw.8
 %{_mandir}/man8/genfw.8*
 
 %changelog
+* Sun Apr 30 2017 Steven Pritchard <steve@kspei.com> 1.50
+- Fix systemd unit to also work with network.service
+
 * Mon Feb 20 2017 Steven Pritchard <steve@kspei.com> 1.49
 - Add systemd unit
 - Modernize spec

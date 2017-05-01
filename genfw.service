@@ -7,3 +7,4 @@ ExecStart=/usr/sbin/genfw -i
 
 [Install]
 WantedBy=network.target
+WantedBy=network.service
