@@ -20,6 +20,9 @@ use Socket;
 use Getopt::Std;
 use YAML;
 
+use feature 'switch';
+
+## no critic (Subroutines::ProhibitSubroutinePrototypes)
 sub reject_auth($$);
 sub check_allowed($$);
 sub allow($$@);
@@ -49,7 +52,7 @@ sub append($);
 sub action($$);
 sub clear_all();
 
-our $VERSION="1.50";
+our $VERSION="2.0.0";
 
 our %interface=();
 our %conf=();
@@ -59,7 +62,7 @@ our %opt=();
 
 getopts('id', \%opt);
 
-if (defined($ENV{'DEBUG'}) || $opt{'d'}) {
+if (exists($ENV{'DEBUG'}) || $opt{'d'}) {
     $config_dir=".";
     $sysconfig_dir=".";
     $|=1;
@@ -104,7 +107,7 @@ for my $rules ("$config_dir/rules",
 die "No rules found!  Exiting...\n" if (!$rules_found);
 
 for my $name (keys(%interface)) {
-    if (grep(/^ignore$/, @{$interface{$name}->{'flags'}})) {
+    if (exists($interface{$name}->{'flags'}->{'ignore'})) {
         debug "Skipping interface $name";
         debug;
         next;
@@ -136,7 +139,7 @@ for my $name (keys(%interface)) {
     debug;
 }
 
-debug Dump(\%interface) if ($ENV{'DEBUG'});
+debug Dump(\%interface) if exists($ENV{'DEBUG'});
 
 generate_rules(%interface);
 
@@ -158,68 +161,60 @@ sub check_allowed($$) {
     my ($in, $out)=@_;
 
     debug "checking for allowed traffic to interface $out";
-    my @allow=grep /^allow=/,
-                   @{$interface{$out}->{'flags'}};
+    my @allow;
 
-    if (@allow) {
-        my @open_port;
+    @allow=@{$interface{$out}->{'flags'}->{'allow'}}
+        if exists($interface{$out}->{'flags'}->{'allow'});
 
-        for my $item (@allow) {
-            debug "parsing '$item'";
-            $item=~s/^allow=//;
-            next if (!$item);
-            for my $ports (split /,/, $item) {
-                # *FIXME* - probably should verify that source
-                # & destination are valid-looking addresses
-                my ($port, $proto, $from, $to, $interface)=
-                    $ports=~/^(.*?)           # port (or protocol)
-                              (?:\/(.*?))?    # protocol (can be omitted)
-                              (?::(.*?))?     # source address (ditto)
-                              (?::(.*?))?     # destination address (ditto)
-                              (?::(.*?))?     # source interface
-                             $/x;
-                next if ($interface and $interface ne $in);
-                if (!$proto) {
-                    if ($port=~/^\d+$/) {
-                        warn "ambiguous allow '$port', ignoring...\n";
-                        next;
-                    }
-                    my $found=0;
-                    for $proto ("tcp", "udp") {
-                        if (getservbyname($port, $proto)) {
-                            push(@open_port, [$port, $proto, $from, $to]);
-                            $found++;
-                        }
-                    }
-                    if (!$found) {
-                        if (getprotobyname($port)) {
-                            push(@open_port, [undef, $port, $from, $to]);
-                        } else {
-                            warn "ambiguous allow '$port', ignoring...\n";
-                            next;
-                        }
-                    }
-                } else {
-                    if ($port!~/^\d+$/ and !getservbyname($port, $proto)) {
-                        warn "invalid port/proto '$port/$proto', ignoring...\n";
-                        next;
-                    }
+    unless (@allow) {
+        debug "No allowed ports to $out.";
+        return;
+    }
 
-                    push(@open_port, [$port, $proto, $from, $to]);
+    my @open_port;
+
+    for my $item (@allow) {
+        next if (exists($item->{'interface'}) and $item->{'interface'} ne $in);
+
+        if (!$item->{'proto'}) {
+            if ($item->{'port'}=~/^\d+$/) {
+                warn "ambiguous allow '@{$item->{'port'}}', ignoring...\n";
+                next;
+            }
+            my $found=0;
+            for my $proto ("tcp", "udp") {
+                if (getservbyname($item->{'port'}, $proto)) {
+                    push(@open_port, [$item->{'port'}, $proto, $item->{'from'}, $item->{'to'}]);
+                    $found++;
                 }
             }
-        }
+            if (!$found) {
+                if (getprotobyname($item->{'port'})) {
+                    push(@open_port, [undef, $item->{'port'}, $item->{'from'}, $item->{'to'}]);
+                } else {
+                    warn "ambiguous allow '@{$item->{'port'}}', ignoring...\n";
+                    next;
+                }
+            }
+        } else {
+            if ($item->{'port'}!~/^\d+$/ and !getservbyname($item->{'port'}, $item->{'proto'})) {
+                warn "invalid port/proto '@{$item->{'port'}}/@{$item->{'proto'}}', ignoring...\n";
+                next;
+            }
 
-        for my $port (@open_port) {
-            debug "allowing proto ", $port->[1],
-                  defined($port->[0]) ?
-                      ", port " . $port->[0] : "",
-                  defined($port->[2]) ?
-                      ", from " . $port->[2] : "",
-                  defined($port->[3]) ?
-                      ", to " . $port->[3] : "";
-            allow($in, $out, @{$port});
+            push(@open_port, [$item->{'port'}, $item->{'proto'}, $item->{'from'}, $item->{'to'}]);
         }
+    }
+
+    for my $port (@open_port) {
+        debug "allowing proto ", $port->[1],
+                defined($port->[0]) ?
+                    ", port " . $port->[0] : "",
+                defined($port->[2]) ?
+                    ", from " . $port->[2] : "",
+                defined($port->[3]) ?
+                    ", to " . $port->[3] : "";
+        allow($in, $out, @{$port});
     }
 }
 
@@ -235,9 +230,9 @@ sub allow($$@) {
 sub label($) {
     my ($name)=@_;
 
-    if (my ($label)=grep /^label=/, @{$interface{$name}->{'flags'}}) {
-        $label=~s/^label=(.*)$/$1/;
-        if ($label) {
+    if (exists($interface{$name}->{'flags'}->{'label'}) and
+        my $label=$interface{$name}->{'flags'}->{'label'}) {
+        if (length($label)) {
             return $label;
         } else {
             return $name;
@@ -252,11 +247,11 @@ sub generate_rules(%) {
 
     # Check chain name lengths.  Error out if they're too long.
     for my $in (keys(%interface)) {
-        next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
+        next if (exists($interface{$in}->{'flags'}->{'ignore'}));
 
         for my $out (keys(%interface)) {
             next if ($in eq $out
-                     or grep /^ignore$/, @{$interface{$out}->{'flags'}});
+                     or exists($interface{$out}->{'flags'}->{'ignore'}));
 
             my $maxlength=30;
 
@@ -271,15 +266,15 @@ sub generate_rules(%) {
 
     # Build NAT (POSTROUTING) rules.
     for my $in (keys(%interface)) {
-        next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
+        next if (exists($interface{$in}->{'flags'}->{'ignore'}));
 
         debug "checking interface $in";
-        if (grep /^nat$/, @{$interface{$in}->{'flags'}}) {
+        if (exists($interface{$in}->{'flags'}->{'nat'})) {
             debug "need to nat interface $in";
             for my $out (keys(%interface)) {
                 next if ($in eq $out or
                          $interface{$out}->{'type'} ne "out" or
-                         grep /^ignore$/, @{$interface{$out}->{'flags'}});
+                         exists($interface{$out}->{'flags'}->{'ignore'}));
 
                 debug "found interface $out to nat out";
 
@@ -325,13 +320,13 @@ sub generate_rules(%) {
     for my $in (keys(%interface)) {
         debug "PREROUTING: checking $in...";
         next if ($interface{$in}->{'type'} ne "out" or
-                 grep /^ignore$/, @{$interface{$in}->{'flags'}});
+                 exists($interface{$in}->{'flags'}->{'ignore'}));
 
         for my $out (keys(%interface)) {
             debug "PREROUTING:   checking $out -> $in...";
             next if ($in eq $out or $interface{$out}->{'type'} eq "out" or
-                     grep /^ignore$/, @{$interface{$out}->{'flags'}} or
-                     !grep /^nat$/, @{$interface{$out}->{'flags'}});
+                     exists($interface{$out}->{'flags'}->{'ignore'}) or
+                     !exists($interface{$out}->{'flags'}->{'nat'}));
 
             debug "filtering traffic to $out from $in...";
 
@@ -366,10 +361,10 @@ sub generate_rules(%) {
         );
 
     for my $iface (keys(%interface)) {
-        next if (grep /^ignore$/, @{$interface{$iface}->{'flags'}});
+        next if (exists($interface{$iface}->{'flags'}->{'ignore'}));
 
-        if (($interface{$iface}->{'type'} eq "int") &&
-            grep /^trusted$/, @{$interface{$iface}->{'flags'}}) {
+        if ($interface{$iface}->{'type'} eq "int" and
+            exists($interface{$iface}->{'flags'}->{'trusted'})) {
             push(@input_rules_early, ["-i", $iface, "-j", "ACCEPT"]);
         }
     }
@@ -412,7 +407,7 @@ sub generate_rules(%) {
         );
 
     for my $in (keys(%interface)) {
-        next if (grep /^ignore$/, @{$interface{$in}->{'flags'}});
+        next if (exists($interface{$in}->{'flags'}->{'ignore'}));
 
         push(@forward_rules_early, ["-i", $in, "-j", label($in)]);
     }
@@ -466,11 +461,11 @@ sub generate_rules(%) {
     }
 
     for my $in (keys(%interface)) {
-        next if (grep(/^ignore$/, @{$interface{$in}->{'flags'}}));
+        next if (exists($interface{$in}->{'flags'}->{'ignore'}));
 
         for my $out (keys(%interface)) {
             next if ($in eq $out or
-                     grep(/^ignore$/, @{$interface{$out}->{'flags'}}));
+                     exists($interface{$out}->{'flags'}->{'ignore'}));
 
             my $label=label($in) . "-" . label($out);
 
@@ -488,10 +483,10 @@ sub generate_rules(%) {
                 filter_to($in, $out, "broadcast");
 
                 if (($interface{$in}->{'type'} eq "int" and
-                     grep /^trusted$/, @{$interface{$in}->{'flags'}}) or
+                     exists($interface{$in}->{'flags'}->{'trusted'})) or
                     ($interface{$in}->{'type'} eq "dmz" and
                      $interface{$out}->{'type'} eq "out" and
-                     grep /^trusted$/, @{$interface{$in}->{'flags'}})) {
+                     exists($interface{$in}->{'flags'}->{'trusted'}))) {
                     debug "append($label)";
                     append($label);
                     established($in, $out);
@@ -510,7 +505,7 @@ sub generate_rules(%) {
     }
 
     for my $in (keys(%interface)) {
-        next if (grep(/^ignore$/, @{$interface{$in}->{'flags'}}));
+        next if exists($interface{$in}->{'flags'}->{'ignore'});
 
         comment_block("Filter traffic from " . label($in) . ".");
         new_chain(label($in));
@@ -524,7 +519,7 @@ sub generate_rules(%) {
         filter_from($in, "broadcast");
 
         for my $out (keys(%interface)) {
-            next if (grep(/^ignore$/, @{$interface{$out}->{'flags'}}));
+            next if exists($interface{$out}->{'flags'}->{'ignore'});
 
             if ($in eq $out) {
                 comment "Allow connections originating from this interface.";
@@ -693,10 +688,42 @@ sub parserules($) {
                 warn "Skipping duplicate definition for interface $name:\n\t$_\n";
                 next;
             }
-            $interface{$name}={'type' => $type};
-            if (@parts) {
-                $interface{$name}->{'flags'}=[@parts];
-                debug "interface $name flags \"@{$interface{$name}->{'flags'}}\"";
+            $interface{$name}={
+                'type'  => $type,
+                'flags' => {},
+            };
+            for my $part (@parts) {
+                my ($key, $value)=split(/=/, $part, 2);
+                no warnings 'experimental';
+                given ($key) {
+                    when (/^(?:ignore|trusted|nat)$/) {
+                        $interface{$name}->{'flags'}->{$key}=defined($value) ? $value : 1;
+                        debug "interface $name flag $key = @{[$interface{$name}->{'flags'}->{$key}]}";
+                    }
+                    when ('label') {
+                        break if !defined($value);
+                        $interface{$name}->{'flags'}->{$key}=$value;
+                        debug "interface $name flag $key = @{[$interface{$name}->{'flags'}->{$key}]}";
+                    }
+                    when ('allow') {
+                        for my $ports (split /,/, $value) {
+                            my %details=();
+
+                            if ($ports=~/^(?<port>.*?)          # port (or protocol)
+                                        (?:\/(?<proto>.*?))?    # protocol (can be omitted)
+                                        (?::(?<from>.*?))?      # source address (ditto)
+                                        (?::(?<to>.*?))?        # destination address (ditto)
+                                        (?::(?<interface>.*?))? # source interface
+                                        $/x) {
+                                %details=%+;
+                            }
+
+                            push(@{$interface{$name}->{'flags'}->{$key}}, \%details);
+                            debug "interface $name flag $key: added @{[Dump(\%details)]}";
+                        }
+                    }
+                    default { warn "Ignoring unsupported flag '$key' on interface $name." }
+                }
             }
         } elsif (defined($parts[1]) and ($parts[1] eq "logging")) {
             if ($parts[0] eq "no") {
@@ -816,7 +843,7 @@ sub parseconfig($$) {
 }
 
 sub debug(@) {
-    return unless (defined($ENV{'DEBUG'}) || $opt{'d'});
+    return unless (exists($ENV{'DEBUG'}) || $opt{'d'});
     if (!@_) {
         print STDERR "\n";
     } else {
@@ -826,7 +853,7 @@ sub debug(@) {
 }
 
 sub bold($) {
-    return @_ if (!-t STDERR);
+    return @_ if (!-t STDERR); ## no critic (InputOutput::ProhibitInteractiveTest)
     return "\033[37;1m" . $_[0] . "\033[0m";
 }
 
