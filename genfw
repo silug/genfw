@@ -3,7 +3,7 @@
 # genfw - Generate a firewall script from some rules
 #         and a Red Hat box's network configuration
 #
-# Copyright (C) 2001-2010 Steven Pritchard <steve@silug.org>
+# Copyright (C) 2001-2020 Steven Pritchard <steve@silug.org>
 # This program is free software; you can redistribute it
 # and/or modify it under the same terms as Perl itself.
 #
@@ -18,7 +18,7 @@ use FileHandle;
 use DirHandle;
 use Socket;
 use Getopt::Std;
-eval { use Data::Dumper; } if ($ENV{'DEBUG'});
+use YAML;
 
 sub reject_auth($$);
 sub check_allowed($$);
@@ -53,6 +53,7 @@ our $VERSION="1.50";
 
 our %interface=();
 our %conf=();
+our $sysconfig_dir;
 our $config_dir;
 our %opt=();
 
@@ -60,12 +61,14 @@ getopts('id', \%opt);
 
 if (defined($ENV{'DEBUG'}) || $opt{'d'}) {
     $config_dir=".";
+    $sysconfig_dir=".";
     $|=1;
     my $oldfh=select(STDERR);
     $|=1;
     select($oldfh);
 } else {
-    $config_dir="/etc/sysconfig";
+    $sysconfig_dir="/etc/sysconfig";
+    $config_dir="$sysconfig_dir/genfw";
 }
 
 # Default
@@ -90,8 +93,8 @@ $conf{'chain'}={
     };
 
 my $rules_found=0;
-for my $rules ("$config_dir/genfw/rules",
-               glob("$config_dir/genfw/rules.d/*.rules")) {
+for my $rules ("$config_dir/rules",
+               glob("$config_dir/rules.d/*.rules")) {
     if (-e $rules) {
         parserules($rules);
         $rules_found=1;
@@ -107,11 +110,11 @@ for my $name (keys(%interface)) {
         next;
     }
 
-    my $dir=new DirHandle "$config_dir/network-scripts"
-        or die "Failed to open $config_dir/network-scripts: $!\n";
-    my @configs=("$config_dir/network-scripts/ifcfg-$name");
+    my $dir=new DirHandle "$sysconfig_dir/network-scripts"
+        or die "Failed to open $sysconfig_dir/network-scripts: $!\n";
+    my @configs=("$sysconfig_dir/network-scripts/ifcfg-$name");
     for my $file (grep(/^ifcfg-$name:\d+$/, $dir->read)) {
-        push(@configs, "$config_dir/network-scripts/$file");
+        push(@configs, "$sysconfig_dir/network-scripts/$file");
     }
     for my $configfile (@configs) {
         debug "configfile: $configfile";
@@ -133,7 +136,7 @@ for my $name (keys(%interface)) {
     debug;
 }
 
-eval { debug Dumper(\%interface); } if ($ENV{'DEBUG'});
+debug Dump(\%interface) if ($ENV{'DEBUG'});
 
 generate_rules(%interface);
 
@@ -734,7 +737,7 @@ sub parserules($) {
         } elsif ($parts[0] eq "include" and defined($parts[1])) {
             for my $rule_file (glob(substr($parts[1], 0, 1) eq "/"
                                     ? $parts[1]
-                                    : "$config_dir/genfw/$parts[1]")) {
+                                    : "$config_dir/$parts[1]")) {
                 parserules($rule_file) if (-e $rule_file);
             }
         } elsif ($parts[0] eq "policy" and scalar(@parts) == 3) {
