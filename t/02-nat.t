@@ -43,7 +43,7 @@ my %ifcfg = (
     is_deeply(
         [rules_in($res, 'PREROUTING', 'mangle')],
         [
-            "-i eth0 -d 192.168.1.0/255.255.255.0 -m limit -j LOG --log-prefix 'eth0 -> eth1: bad dest: '",
+            '-i eth0 -d 192.168.1.0/255.255.255.0 -m limit -j LOG --log-prefix "eth0 -> eth1: bad dest: "',
             '-i eth0 -d 192.168.1.0/255.255.255.0 -j DROP',
         ],
         'mangle PREROUTING drops outside packets addressed to the NATed network',

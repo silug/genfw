@@ -45,19 +45,46 @@ sub generate_rules;
 sub comment_block;
 sub comment_long;
 sub comment;
-sub begin_script;
 sub set_policy;
-sub iptables;
-sub new_chain;
+sub split_label;
+sub table;
+sub chain;
+sub policy;
+sub rule;
 sub insert;
 sub append;
 sub action;
-sub clear_all;
+sub format_iptables_restore;
+sub quote_restore;
+sub apply_ruleset;
 
 our $VERSION="1.50";
 
 our %interface=();
 our %conf=();
+
+# The generated ruleset. generate_rules() records what the firewall should
+# contain here, as iptables-style argument lists keyed by table and chain,
+# and an output backend formats it at the end. Adding another backend (an
+# "nft -f" formatter, say) means adding a formatter and an apply command to
+# %backend, not touching the code that decides what the rules are.
+our %ruleset=();
+our @pending_comments=();
+our @tables=qw(filter nat mangle raw);
+our %builtin=(
+        'filter' => [qw(INPUT FORWARD OUTPUT)],
+        'nat'    => [qw(PREROUTING INPUT OUTPUT POSTROUTING)],
+        'mangle' => [qw(PREROUTING INPUT FORWARD OUTPUT POSTROUTING)],
+        'raw'    => [qw(PREROUTING OUTPUT)],
+    );
+our %backend=(
+        'iptables-restore' => {
+            'format' => \&format_iptables_restore,
+            'test'   => ['iptables-restore', '--test'],
+            'apply'  => ['iptables-restore'],
+        },
+    );
+our $output='iptables-restore';
 our $sysconfig_dir;   # holds network-scripts/
 our $config_dir;      # holds rules, rules.d/, and include targets
 our %opt=();
@@ -150,6 +177,19 @@ if ($ENV{'DEBUG'}) {
 
 generate_rules(%interface);
 
+my $text=$backend{$output}->{'format'}->(\%ruleset);
+
+if ($opt{'i'}) {
+    # Check the whole ruleset first. The loader commits one table at a
+    # time, so without this an error in a later table would leave earlier
+    # tables already replaced.
+    apply_ruleset($text, @{$backend{$output}->{'test'}})
+        if ($backend{$output}->{'test'});
+    apply_ruleset($text, @{$backend{$output}->{'apply'}});
+} else {
+    print $text;
+}
+
 ####
 #
 # Subs
@@ -158,9 +198,9 @@ generate_rules(%interface);
 sub reject_auth {
     my ($in, $out)=@_;
 
-    iptables "-A", label($in) . "-" . label($out),
+    rule label($in) . "-" . label($out),
            qw(-p tcp --dport 113 -j REJECT --reject-with tcp-reset);
-    iptables "-A", label($in) . "-" . label($out),
+    rule label($in) . "-" . label($out),
            qw(-p udp --dport 113 -j REJECT --reject-with icmp-port-unreachable);
 }
 
@@ -226,7 +266,7 @@ sub check_allowed {
 sub allow {
     my ($in, $out, $port, $proto, $from, $to)=@_;
 
-    iptables "-A", label($in) . "-" . label($out),
+    rule label($in) . "-" . label($out),
              "-p", $proto, $port ? ("--dport", $port) : (),
              $from ? ("-s", $from) : (), $to ? ("-d", $to) : (),
              qw(-j acceptnew);
@@ -421,14 +461,9 @@ sub generate_rules {
 
     push(@{$conf{'append'}->{'FORWARD'}}, @forward_rules_late);
     
-    # Start output...
-    begin_script;
-
-    comment_long "Set default policies.";
+    # Record the ruleset. Loading a table with iptables-restore replaces it,
+    # so there is no explicit flush step any more.
     set_policy($conf{'policy'});
-
-    comment_block "Clear all current rules.";
-    clear_all;
 
     comment_block "genfw-defined chains.";
 
@@ -438,7 +473,7 @@ sub generate_rules {
         } else {
             comment_long $chain;
         }
-        new_chain($chain);
+        chain($chain);
         insert($chain);
         append($chain);
     }
@@ -452,7 +487,7 @@ sub generate_rules {
             } else {
                 comment_long $chain;
             }
-            new_chain($chain);
+            chain($chain);
             insert($chain);
             append($chain);
         }
@@ -468,7 +503,7 @@ sub generate_rules {
             my $label=label($in) . "-" . label($out);
 
             comment_block(label($in) . " -> " . label($out));
-            new_chain($label);
+            chain($label);
             debug "insert($label)";
             insert($label);
             if ($interface{$in}->{'type'} eq "out" and
@@ -506,7 +541,7 @@ sub generate_rules {
         next if (exists($interface{$in}->{'flags'}->{'ignore'}));
 
         comment_block("Filter traffic from " . label($in) . ".");
-        new_chain(label($in));
+        chain(label($in));
 
         debug "insert(" . label($in) . ")";
         insert(label($in));
@@ -521,10 +556,10 @@ sub generate_rules {
 
             if ($in eq $out) {
                 comment "Allow connections originating from this interface.";
-                iptables("-A", label($in), "-o", $out, "-j", "ACCEPT");
+                rule(label($in), "-o", $out, "-j", "ACCEPT");
             } else {
-                iptables("-A", label($in), "-o", $out, "-j",
-                         label($in) . "-" . label($out));
+                rule(label($in), "-o", $out, "-j",
+                     label($in) . "-" . label($out));
             }
         }
 
@@ -558,35 +593,35 @@ sub generate_rules {
 sub icmpfilter {
     my ($in, $out)=@_;
 
-    iptables "-A", label($in) . "-" . label($out), qw(-j icmp-filter);
+    rule label($in) . "-" . label($out), qw(-j icmp-filter);
 }
 
 sub established {
     my ($in, $out)=@_;
 
-    iptables "-A", label($in) . "-" . label($out), qw(-j established);
+    rule label($in) . "-" . label($out), qw(-j established);
 }
 
 sub drop {
     my ($in, $out)=@_;
 
-    iptables "-A", label($in) . "-" . label($out), @{$conf{'log'}},
+    rule label($in) . "-" . label($out), @{$conf{'log'}},
           "--log-prefix", sprintf("%.29s",
               label($in) . " -> " . label($out) . ": ")
         if (@{$conf{'log'}});
-    iptables "-A", label($in) . "-" . label($out), qw(-j DROP);
+    rule label($in) . "-" . label($out), qw(-j DROP);
 }
 
 sub accept {
     my ($in, $out)=@_;
 
-    iptables "-A", label($in) . "-" . label($out), qw(-j ACCEPT);
+    rule label($in) . "-" . label($out), qw(-j ACCEPT);
 }
 
 sub acceptnew {
     my ($in, $out)=@_;
 
-    iptables "-A", label($in) . "-" . label($out), qw(-j acceptnew);
+    rule label($in) . "-" . label($out), qw(-j acceptnew);
 }
 
 sub filter_from {
@@ -609,11 +644,11 @@ sub filter_from {
             comment "Skipping point-to-point address " . $cfg->{'ipaddr'} . ".";
             next;
         }
-        my @rule=("-A", label($in), "-d", $cfg->{$item});
-        iptables @rule, @{$conf{'log'}}, "--log-prefix",
-                 sprintf("%.29s", label($in) . ": $item: ")
+        my @rule=(label($in), "-d", $cfg->{$item});
+        rule @rule, @{$conf{'log'}}, "--log-prefix",
+             sprintf("%.29s", label($in) . ": $item: ")
             if (@{$conf{'log'}});
-        iptables @rule, qw(-j DROP);
+        rule @rule, qw(-j DROP);
     }
 }
 
@@ -637,12 +672,12 @@ sub filter_to {
             comment "Skipping point-to-point address " . $cfg->{'ipaddr'} . ".";
             next;
         }
-        my @rule=("-A", label($in) . "-" . label($out), "-d", $cfg->{$item});
-        iptables @rule, @{$conf{'log'}}, "--log-prefix",
-                 sprintf("%.29s",
-                     label($in) . "-" . label($out) . ": $item: ")
+        my @rule=(label($in) . "-" . label($out), "-d", $cfg->{$item});
+        rule @rule, @{$conf{'log'}}, "--log-prefix",
+             sprintf("%.29s",
+                 label($in) . "-" . label($out) . ": $item: ")
             if (@{$conf{'log'}});
-        iptables @rule, qw(-j DROP);
+        rule @rule, qw(-j DROP);
     }
 }
 
@@ -862,86 +897,72 @@ sub bold {
 }
 
 sub comment_block {
-    return if ($opt{'i'});
-
-    print "\n####";
-    comment_long(@_);
+    push(@pending_comments, "", "####", "#");
+    comment(@_);
+    push(@pending_comments, "#");
 }
 
 sub comment_long {
-    return if ($opt{'i'});
-
-    print "\n#\n";
+    push(@pending_comments, "", "#");
     comment(@_);
-    print "#\n";
+    push(@pending_comments, "#");
 }
 
+# Comments attach to the next rule recorded, in whatever table it lands in.
 sub comment {
-    return if ($opt{'i'});
-
-    for my $line (@_) {
-        print "# $line\n";
-    }
-}
-
-sub begin_script {
-    return if ($opt{'i'});
-
-    print "#!/bin/sh\n";
+    push(@pending_comments, map("# $_", @_));
 }
 
 sub set_policy {
     my $policy=shift;
 
     for my $label (keys %{$policy}) {
-        if ($label=~/^([^:]+):(.+)$/) {
-            my ($table, $chain)=($1, $2);
-
-            iptables("-t", $table, "-P", $chain, $policy->{$label});
-        } else {
-            iptables("-P", $label, $policy->{$label});
-        }
+        policy($label, $policy->{$label});
     }
 }
 
-sub iptables {
-    my @command=("iptables");
+# "[table:]chain" -> (table, chain), defaulting to the filter table.
+sub split_label {
+    my ($label)=@_;
 
-    if ($opt{'i'}) {
-        push(@command, @_);
-        debug "Running '@command' (" . scalar(@command) . " args)...";
-        warn "'@command' failed with exit value " . ($? >> 8)
-            if (system(@command) != 0);
-    } else {
-        my @bits=@_;
-
-        for my $part (@bits) {
-            if ($part=~/[^\w\-\.\/]/) {
-                $part=~s/'/'\\''/g;
-                $part="'$part'";
-            }
-            push @command, $part;
-        }
-        print "@command\n";
-    }
+    return ($label=~/^([^:]+):(.+)$/) ? ($1, $2) : ('filter', $label);
 }
 
-sub new_chain {
-    my $chain=$_[0];
-    my $table;
+sub table {
+    my ($table)=@_;
 
-    if ($chain=~/^([^:]+):(.+)$/) {
-        $table=$1;
-        $chain=$2;
-    }
+    warn "Unknown table '$table'.\n" unless (grep { $_ eq $table } @tables);
+    $ruleset{$table}||={'chains' => [], 'policy' => {}, 'rules' => []};
+    return $ruleset{$table};
+}
 
-    debug "new chain $chain" . (defined $table ? ", table '$table'" : "");
+sub chain {
+    my ($label)=@_;
+    my ($table, $chain)=split_label($label);
 
-    my @args;
-    @args=("-t", $table) if (defined $table);
-    push(@args, "-N", $chain);
+    debug "new chain $chain, table '$table'";
+    push(@{table($table)->{'chains'}}, $chain);
+}
 
-    iptables(@args);
+sub policy {
+    my ($label, $target)=@_;
+    my ($table, $chain)=split_label($label);
+
+    debug "policy $target for chain $chain, table '$table'";
+    table($table)->{'policy'}->{$chain}=$target;
+}
+
+# Record one rule, appended to chain "[table:]chain", with iptables-style
+# arguments. Every rule the firewall contains goes through here.
+sub rule {
+    my ($label, @args)=@_;
+    my ($table, $chain)=split_label($label);
+
+    debug "rule in $chain, table '$table': @args";
+    push(@{table($table)->{'rules'}},
+         {'chain' => $chain, 'args' => [@args],
+          'comments' => [@pending_comments]});
+    @pending_comments=();
 }
 
 sub insert {
@@ -954,56 +975,147 @@ sub append {
 
 sub action {
     my ($action, $label)=@_;
-    my $table=undef;
-    my $chain;
 
-    if ($label=~/^([^:]+):(.*)$/) {
-        $table=$1;
-        $chain=$2;
-    } else {
-        $chain=$label;
-    }
-
-    debug "$action in $chain" . (defined $table ? ", table '$table'" : "");
+    debug "$action in $label";
 
     if (defined($conf{$action}) and defined($conf{$action}->{$label})) {
         my @rules=@{$conf{$action}->{$label}};
         @rules=reverse @rules if ($action eq 'insert');
         for my $rule (@rules) {
             debug "Adding rule '@{$rule}'...";
-            iptables $table ? ("-t", $table) : (), "-A", $chain, @{$rule};
+            rule $label, @{$rule};
         }
     }
 }
 
-sub clear_all {
-    iptables "-F";
-    iptables "-X";
-    iptables qw(-t nat -F);
-    iptables qw(-t nat -X);
-    iptables qw(-t mangle -F);
-    iptables qw(-t mangle -X);
-    iptables qw(-t raw -F);
-    iptables qw(-t raw -X);
-    iptables "-Z";
+####
+#
+# Output backends
+#
+
+# iptables-restore(8) input. Every table is listed, even when empty, so that
+# loading the file replaces the whole firewall: iptables-restore flushes a
+# table it is given, and leaves alone any table it is not.
+#
+# The "#!" line lets a saved copy be executed directly: the kernel runs
+# iptables-restore with the file as its argument, and the loader skips the
+# line as a comment. /usr/sbin is where every supported platform keeps it.
+sub format_iptables_restore {
+    my ($rs)=@_;
+
+    my $text="#!/usr/sbin/iptables-restore\n"
+           . "# Generated by genfw $VERSION\n"
+           . "# Load with \"iptables-restore < this-file\", or make this file\n"
+           . "# executable and run it.\n";
+
+    for my $table (@tables) {
+        my $t=$rs->{$table} || {'chains' => [], 'policy' => {}, 'rules' => []};
+
+        $text.="\n*$table\n";
+
+        for my $chain (@{$builtin{$table}}) {
+            $text.=":$chain $t->{'policy'}->{$chain} [0:0]\n"
+                if (defined($t->{'policy'}->{$chain}));
+        }
+        for my $chain (@{$t->{'chains'}}) {
+            # A policy on a user chain is an error, but let iptables-restore
+            # report it rather than silently dropping what the user wrote.
+            my $policy=defined($t->{'policy'}->{$chain})
+                ? $t->{'policy'}->{$chain} : "-";
+            $text.=":$chain $policy [0:0]\n";
+        }
+        for my $rule (@{$t->{'rules'}}) {
+            $text.=join("", map("$_\n", @{$rule->{'comments'}}));
+            $text.=join(" ", "-A", $rule->{'chain'},
+                        map(quote_restore($_), @{$rule->{'args'}})) . "\n";
+        }
+
+        $text.="COMMIT\n";
+    }
+
+    if (@pending_comments) {
+        debug "Dropping trailing comments with no rule to attach to.";
+        @pending_comments=();
+    }
+
+    return $text;
+}
+
+# iptables-restore splits on whitespace and understands double-quoted
+# arguments with backslash escapes for '"' and '\'. Quote anything outside
+# a conservative safe set.
+sub quote_restore {
+    my ($arg)=@_;
+
+    return $arg if ($arg=~/^[\w.\/:,!+=@%-]+$/);
+    $arg=~s/([\\"])/\\$1/g;
+    return "\"$arg\"";
+}
+
+# Feed the formatted ruleset to a backend command (the loader, or its test
+# mode). A failure here means the firewall was not (or not fully) updated,
+# so it is fatal.
+sub apply_ruleset {
+    my ($text, @command)=@_;
+
+    debug "Running '@command'...";
+
+    open(my $pipe, '|-', @command)
+        or die "Failed to run '@command': $!\n";
+    print $pipe $text;
+    if (!close($pipe)) {
+        die "'@command' failed with exit value " . ($? >> 8) . "\n" if ($?);
+        die "Failed writing to '@command': $!\n";
+    }
 }
 
 __END__
 
 =head1 NAME
 
-genfw - Generate a firewall script
+genfw - Generate an iptables firewall from a simple rules file
 
 =head1 SYNOPSIS
 
-B<genfw>
+B<genfw> [B<-d>] [B<-i>]
 
 =head1 DESCRIPTION
 
-This script generates a firewall script based on a F<rules> file and the
-network configuration of a system.
+genfw generates a complete iptables ruleset from a F<rules> file describing
+the system's interfaces and the network configuration of the system. The
+output is in the format read by L<iptables-restore(8)>: every table is
+listed, so loading it replaces the whole firewall in one step.
 
-=head1 OPTIONS
+By default the ruleset is printed to standard output, where it can be
+reviewed, saved, or loaded with C<iptables-restore>. It begins with a
+C<#!/usr/sbin/iptables-restore> line, so a saved copy made executable can
+also be run directly to load itself. With B<-i> it is loaded directly.
+
+=head1 COMMAND-LINE OPTIONS
+
+=over 4
+
+=item B<-i>
+
+Install the ruleset: pipe it to C<iptables-restore> instead of printing it.
+The ruleset is first checked with C<iptables-restore --test>, so a ruleset
+that cannot be parsed is rejected before anything is changed; only then is
+it loaded. A failure at either step is fatal, since it means the firewall
+was not (or not fully) updated. This is what the systemd unit and the init
+script run.
+
+=item B<-d>
+
+Debug mode. Read F<genfw/rules>, F<genfw/rules.d/*.rules>, and
+F<network-scripts/ifcfg-*> from the current directory instead of
+F</etc/sysconfig>, and print tracing to standard error. Setting the
+C<DEBUG> environment variable has the same effect and also dumps the parsed
+interface table. Useful for trying a configuration without root and
+without touching the live firewall.
+
+=back
+
+=head1 CONFIGURATION
 
 The F<rules> file should contain one line for each interface on the system.
 Like most standard Unix configuration files, C<\> is used to continue lines
@@ -1154,9 +1266,9 @@ This only applies to traffic from an "internal" or "dmz" interface to an
 
 =head1 FILES
 
-F</etc/sysconfig/genfw/rules>   The rules used to generate the firewall script.
+F</etc/sysconfig/genfw/rules>   The rules used to generate the firewall.
 
-F</etc/sysconfig/genfw/rules.d/*.rules>   Additional rules used to generate the firewall script.
+F</etc/sysconfig/genfw/rules.d/*.rules>   Additional rules used to generate the firewall.
 
 F</etc/sysconfig/network-scripts/ifcfg-*> The network configuration.
 
@@ -1176,7 +1288,7 @@ Steven Pritchard E<lt>F<steve@silug.org>E<gt>
 
 =head1 SEE ALSO
 
-L<iptables(8)>, L<services(5)>, L<protocols(5)>
+L<iptables-restore(8)>, L<iptables(8)>, L<services(5)>, L<protocols(5)>
 
 =cut
 

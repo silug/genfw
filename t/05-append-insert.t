@@ -28,7 +28,7 @@ RULES
     my ($ssh) = grep { $input[$_] eq '-p tcp --dport 22 -j ACCEPT' } 0 .. $#input;
     my ($lo)  = grep { $input[$_] eq '-i lo -j ACCEPT' } 0 .. $#input;
     ok($ssh > $lo, 'append lands after generated early rules');
-    is($input[-1], "-m limit -j LOG --log-prefix 'INPUT fall-through: '", 'generated late rules follow appends');
+    is($input[-1], '-m limit -j LOG --log-prefix "INPUT fall-through: "', 'generated late rules follow appends');
 }
 
 # --- Multiple appends keep file order; multiple inserts keep file order too
@@ -146,20 +146,26 @@ RULES
     my ($a) = grep { $input[$_] =~ /--dport 8022/ } 0 .. $#input;
     my ($b) = grep { $input[$_] =~ /--dport 8024/ } 0 .. $#input;
     ok($a < $b, 'filter:INPUT and INPUT appends share one ordered list');
-    ok(!(grep { /-t filter / } @{$res->{rules}}), 'no rule is emitted with an explicit -t filter');
+    is_deeply([map { scalar @{ $res->{tables}{$_}{rules} } } qw(nat mangle raw)], [0, 0, 0],
+        'filter: rules land in the filter table only');
 }
 
-# --- Arguments with shell metacharacters are single-quoted in script output.
+# --- Arguments outside the safe character set are double-quoted the way
+#     iptables-restore expects, with backslash escapes for '"' and '\'.
 {
     my $res = run_rules(<<'RULES');
 append INPUT -m comment --comment has\ spaces -j ACCEPT
 append INPUT -m string --string it's -j DROP
+append INPUT -m comment --comment say"hi" -j ACCEPT
+append INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 RULES
     my @input = rules_in($res, 'INPUT');
     # "has\ spaces" is split on whitespace by the parser, so the backslash
-    # survives as a literal and is quoted; this documents current behavior.
-    ok((grep { /--comment 'has\\'/ } @input), 'backslash is quoted, not interpreted');
-    ok((grep { /--string 'it'\\''s'/ } @input), "embedded single quote is escaped as '\\''");
+    # survives as a literal argument; this documents current behavior.
+    ok((grep { /--comment "has\\\\" spaces/ } @input), 'backslash is escaped inside double quotes');
+    ok((grep { /--string "it's"/ } @input), 'single quote needs no escaping inside double quotes');
+    ok((grep { /--comment "say\\"hi\\""/ } @input), 'double quote is backslash-escaped');
+    ok((grep { /--state ESTABLISHED,RELATED -j/ } @input), 'plain comma-separated lists stay unquoted');
 }
 
 done_testing;
