@@ -79,11 +79,17 @@ my %ifcfg = (
     ok((grep { $_ eq 'eth1' } chains_created($res)), 'interface chain still created');
 }
 
-# --- Missing network-scripts directory is fatal.
+# --- Without a network-scripts directory, addresses come from ip instead
+#     (t/10-addresses.t covers that source; here just confirm the fallback).
 {
-    my $res = run_genfw(make_fixture(rules => "int eth1\nout eth0\n", no_network_scripts => 1));
-    isnt($res->{status}, 0, 'missing network-scripts dir: non-zero exit');
-    like($res->{stderr}, qr/Failed to open .*network-scripts/, 'missing network-scripts dir: error message');
+    my ($bindir) = fake_ip();
+    my $res = run_genfw(
+        make_fixture(rules => "int eth1\nout eth0\n", no_network_scripts => 1),
+        env => { PATH => "$bindir:$ENV{PATH}" },
+    );
+    is($res->{status}, 0, 'missing network-scripts dir is not fatal');
+    like($res->{stderr}, qr/^d: Interface addresses from 'ip' \(auto-detected\)/m, 'addresses fall back to ip');
+    ok((grep { $_ eq 'eth1-eth0' } chains_created($res)), 'rules are still generated');
 }
 
 # --- ignore flag.

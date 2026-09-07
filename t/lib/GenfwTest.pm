@@ -27,6 +27,7 @@ our @EXPORT = qw(
     chains_created
     policy_of
     fake_iptables_restore
+    fake_ip
     read_file
 );
 
@@ -194,6 +195,42 @@ if [ "\$*" != "--test" ] && [ -n "\$GENFW_FAKE_EXIT_LOAD" ]; then exit "\$GENFW_
 exit 0
 EOS
     chmod 0755, "$bindir/iptables-restore";
+    return ($bindir, $logfile);
+}
+
+# fake_ip(%devices) -> ($bindir, $logfile)
+#
+# Creates a directory containing a fake "ip" that answers
+# "ip -o -4 addr show dev NAME" with the canned text given for NAME in
+# %devices (in ip -o format), exits 1 with ip's "does not exist" message for
+# any other device, and logs each invocation's arguments to $logfile.
+# Prepend $bindir to PATH to exercise the "ip" address source without
+# depending on the host's interfaces.
+sub fake_ip {
+    my %devices = @_;
+    my $bindir = tempdir('genfw-fakeip-XXXXXX', TMPDIR => 1, CLEANUP => 1);
+    my $devdir = "$bindir/devices";
+    mkdir $devdir;
+    for my $dev (keys %devices) {
+        write_file("$devdir/$dev", $devices{$dev});
+    }
+    my $logfile = "$bindir/ip.log";
+    write_file("$bindir/ip", <<"EOS");
+#!/bin/sh
+printf '%s\\n' "\$*" >> '$logfile'
+dev=""
+while [ \$# -gt 0 ]; do
+    if [ "\$1" = dev ]; then dev="\$2"; fi
+    shift
+done
+if [ -n "\$dev" ] && [ -f '$devdir'/"\$dev" ]; then
+    cat '$devdir'/"\$dev"
+    exit 0
+fi
+echo "Device \\"\$dev\\" does not exist." >&2
+exit 1
+EOS
+    chmod 0755, "$bindir/ip";
     return ($bindir, $logfile);
 }
 

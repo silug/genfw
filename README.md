@@ -17,19 +17,21 @@ systemd unit does at boot.
 
 ## Status
 
-genfw is mature and small (one Perl script), but it targets a platform that
-has moved on:
+genfw is mature and small (one Perl script). Things to know:
 
-- It reads network configuration from `/etc/sysconfig/network-scripts/ifcfg-*`.
-  RHEL 9 and current Fedora no longer create these files by default.
+- It learns interface addresses either from Red Hat
+  `/etc/sysconfig/network-scripts/ifcfg-*` files or, on systems without them
+  (RHEL 9, current Fedora, Debian and derivatives), from the running system
+  via `ip -o -4 addr show`. The latter needs interfaces to be up when genfw
+  runs; see the `addresses` directive below.
 - It generates IPv4 rules only. There is no ip6tables support.
 - It drives `iptables`, which on current systems is the nftables
   compatibility layer, and it will conflict with firewalld if both are
   enabled.
 
-It works as documented on RHEL and CentOS 7 and earlier, and on any system
-where `ifcfg-*` files and `iptables` are still present. See `TODO` for the
-wishlist.
+The RPM targets EL7 and later. On Debian and derivatives, `iptables`,
+`iproute2`, and `perl` are all that is needed; there is no `.deb` yet, so
+install the script and unit by hand. See `TODO` for the wishlist.
 
 ## Installation
 
@@ -75,8 +77,9 @@ package is also needed; the RPM pulls it in automatically.
 ## Configuration
 
 genfw reads `/etc/sysconfig/genfw/rules` and any `/etc/sysconfig/genfw/rules.d/*.rules`,
-then the `ifcfg-*` file for each interface named in them. `#` starts a
-comment and a trailing `\` continues a line.
+then learns the addresses of each interface named in them, from `ifcfg-*`
+files or from `ip` (see `addresses` below). `#` starts a comment and a
+trailing `\` continues a line.
 
 A three-interface gateway, taken from `t/sample/genfw/rules` in this
 repository:
@@ -143,6 +146,7 @@ Each `allow=` item is `port[/proto][:src[:dst[:iface]]]`:
 | `policy` [*table*`:`]*chain* *target* | Set a built-in chain's policy. Defaults are `INPUT DROP`, `OUTPUT ACCEPT`, `FORWARD DROP`. |
 | `no logging`, `limit logging`, `full logging` | Control logging of dropped packets. `limit` is the default and adds `-m limit` to every `LOG` rule. |
 | `include` *file* | Read more rules from *file*, a path relative to `/etc/sysconfig/genfw/` or absolute, and it may be a glob. |
+| `addresses` `ifcfg` or `ip` | Where interface addresses come from: Red Hat `ifcfg-*` files, or the running system via `ip -o -4 addr show`. Default: `ifcfg` if any `ifcfg-*` file exists, else `ip`. With `ip`, run genfw after the network is up (order the unit after `network-online.target`, or re-run from a dispatcher hook); a DHCP-assigned address is treated like `BOOTPROTO=dhcp`. |
 
 genfw defines three chains you can jump to from your own rules: `acceptnew`
 (accept new connections), `established` (accept established and related),
