@@ -124,10 +124,12 @@ does not match both. A release is:
    the release in the GitHub UI instead also works; it creates the tag.
 3. Approving the `release` environment when the workflow asks.
 
-`.github/workflows/release.yml` then builds one portable noarch RPM (no
-dist tag, gzip payload so EL7's rpm can read it), GPG-signs the RPMs and
-tarball with the key from the `release` environment, installs the result on
-EL7, EL9, and Fedora, attests provenance, and publishes the assets. A tag
+`.github/workflows/release.yml` then builds one portable noarch RPM on EL8
+(the oldest platform with usable images; no dist tag, and building on the
+oldest target is what keeps the package installable on EL7), GPG-signs the
+RPMs and tarball with the key from the `release` environment, installs the
+result on EL7, EL9, and Fedora, attests provenance, and publishes the
+assets. A tag
 with a suffix (`v1.51-rc1`) is a prerelease and may run without the signing
 key; a real release requires it. Nothing in that workflow can be tested
 without pushing a tag, so use a `-rc` tag to rehearse.

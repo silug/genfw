@@ -14,6 +14,14 @@ name: Release
 # required reviewer so a release needs a human approval. A prerelease can
 # run without the key (assets are then unsigned and the job says so); a
 # real release requires it.
+#
+# The RPM is built on EL8, the oldest platform with usable container images
+# and mirrors, so that one noarch package installs everywhere from EL7 up:
+# rpm format features only grow, so building on the oldest target avoids
+# chasing each new default (Fedora's zstd payloads and merged /usr/sbin have
+# both already bitten). The verify job then installs it on EL7, EL9, and
+# Fedora. rpmlint runs in the regular test workflow on Fedora, where it is
+# current; EL8's is too old to know SPDX license names.
 
 on:
   push:
@@ -28,10 +36,10 @@ concurrency:
 
 jobs:
   build:
-    name: Build and sign
+    name: Build and sign (EL8)
     runs-on: ubuntu-latest
     environment: release
-    container: fedora:latest
+    container: almalinux:8
     outputs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
@@ -42,8 +50,8 @@ jobs:
       - name: Install build and signing tools
         run: >-
           dnf install -y --setopt=install_weak_deps=False
-          git make rpm-build rpm-sign rpmdevtools rpmlint 'dnf-command(builddep)'
-          gnupg2 perl perl-ExtUtils-MakeMaker systemd glibc-langpack-en
+          git make rpm-build rpm-sign rpmdevtools 'dnf-command(builddep)'
+          gnupg2 perl perl-ExtUtils-MakeMaker systemd
 
       - uses: actions/checkout@v4
 
@@ -70,16 +78,16 @@ jobs:
       - name: Install BuildRequires from the spec
         run: dnf builddep -y genfw.spec
 
-      # One noarch RPM for every supported platform: no dist tag, and gzip
-      # payloads because EL7's rpm cannot read Fedora's default zstd.
+      # One noarch RPM for every supported platform, so no dist tag. EL8's
+      # rpm defaults (xz payload, real /usr/sbin) already suit EL7.
       - name: Configure rpmbuild for portable output
         run: |
           cat > ~/.rpmmacros <<'EOM'
           %dist %{nil}
-          %_binary_payload w9.gzdio
-          %_source_payload w9.gzdio
           %_gpg_digest_algo sha256
           EOM
+          rpm --version
+          rpm --eval 'sbindir=%{_sbindir} payload=%{?_binary_payload}'
 
       - name: Build tarball, source RPM, and binary RPM
         run: |
@@ -89,9 +97,13 @@ jobs:
           mkdir -p dist
           cp genfw-*.tar.gz genfw-*.src.rpm ~/rpmbuild/RPMS/noarch/genfw-*.noarch.rpm dist/
           ls -l dist
-
-      - name: rpmlint
-        run: rpmlint -r genfw.rpmlintrc dist/*.rpm
+          echo "::group::package contents and rpmlib requirements"
+          rpm -qlp dist/genfw-*.noarch.rpm
+          rpm -qp --requires dist/genfw-*.noarch.rpm | grep rpmlib
+          echo "::endgroup::"
+          # The systemd unit runs /usr/sbin/genfw; a build host with merged
+          # /usr/sbin would silently put it in /usr/bin instead.
+          rpm -qlp dist/genfw-*.noarch.rpm | grep -qx /usr/sbin/genfw
 
       - name: Import the signing key
         if: env.GPG_PRIVATE_KEY != ''
@@ -188,8 +200,11 @@ jobs:
           fi
           install /dist/genfw-*.noarch.rpm
           rpm -qi genfw | grep -E '^(Version|Release|Signature)'
+          rpm -ql genfw
+          test -x /usr/sbin/genfw
           cd /src/t/sample
-          rules=$(/usr/sbin/genfw -d 2>/dev/null | grep -c '^-A')
+          /usr/sbin/genfw -d 2> >(grep -v '^d: ' >&2) > /tmp/sample.rules
+          rules=$(grep -c '^-A' /tmp/sample.rules)
           echo "generated $rules rules with the installed genfw"
           test "$rules" -gt 50
           EOS
