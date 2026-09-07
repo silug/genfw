@@ -893,7 +893,7 @@ sub iptables(@) {
 
         for my $part (@bits) {
             if ($part=~/[^\w\-\.\/]/) {
-                $part=~s/'/'\''/g;
+                $part=~s/'/'\\''/g;
                 $part="'$part'";
             }
             push @command, $part;

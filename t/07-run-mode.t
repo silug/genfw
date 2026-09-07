@@ -47,6 +47,39 @@ my $script = run_genfw(make_fixture(rules => $rules, ifcfg => \%ifcfg), env => {
     like($argv, qr/\[--state\]\[ESTABLISHED,RELATED\]/, 'comma-separated state list is one argv element');
 }
 
+# The script-mode output, when actually executed by sh, must hand iptables
+# exactly the argv that -i mode passes directly. This is where quoting bugs
+# in script mode show up.
+{
+    my $tricky = "int eth1 nat\nout eth0\n"
+               . "append INPUT -m comment --comment it's -j ACCEPT\n"
+               . "append INPUT -m string --string 'quoted' -j DROP\n"
+               . "append INPUT -m comment --comment back\\slash -j ACCEPT\n";
+
+    my ($bindir_i, $log_i) = fake_iptables();
+    run_genfw(
+        make_fixture(rules => $tricky, ifcfg => \%ifcfg),
+        opts => ['-i', '-d'],
+        env  => { %stable, PATH => "$bindir_i:$ENV{PATH}" },
+    );
+
+    my $dir = make_fixture(rules => $tricky, ifcfg => \%ifcfg);
+    my $script = run_genfw($dir, env => { %stable });
+    open my $fh, '>', "$dir/firewall.sh" or die $!;
+    print $fh $script->{stdout};
+    close $fh;
+
+    my ($bindir_s, $log_s) = fake_iptables();
+    my $sh_out = qx(PATH='$bindir_s:$ENV{PATH}' sh -e '$dir/firewall.sh' 2>&1);
+    is($? >> 8, 0, 'generated script runs under sh -e without error') or diag($sh_out);
+
+    is(read_file("$log_s.argv"), read_file("$log_i.argv"),
+        'sh executing the generated script yields the same argv as -i mode');
+    like(read_file("$log_s.argv"), qr/\[--comment\]\[it's\]/, "embedded ' survives the round trip through sh");
+    like(read_file("$log_s.argv"), qr/\[--string\]\['quoted'\]/, 'surrounding quotes from the rules file survive as literals');
+    like(read_file("$log_s.argv"), qr/\[--comment\]\[back\\slash\]/, 'backslash survives the round trip through sh');
+}
+
 # iptables failures are warnings, not fatal.
 {
     my ($bindir, $log) = fake_iptables();
