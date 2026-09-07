@@ -35,8 +35,9 @@ wishlist.
 
 Each [release](https://github.com/silug/genfw/releases) ships a single
 `noarch` RPM that installs on EL7, EL8, EL9, and Fedora, plus the source RPM
-and tarball. The RPMs and tarball are GPG-signed; the public key is attached
-to the release as `RPM-GPG-KEY-genfw`. To verify and install:
+and tarball. The RPMs and tarball are GPG-signed. The public key is
+`RPM-GPG-KEY-genfw` in this repository and is also attached to each release.
+To verify and install:
 
 ```sh
 rpm --import RPM-GPG-KEY-genfw
