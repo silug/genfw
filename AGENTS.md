@@ -1,8 +1,6 @@
 # AGENTS.md
 
-Guidance for AI coding agents working in this repository. `CLAUDE.md` is a
-symlink to this file so Claude Code picks it up; tools that read `AGENTS.md`
-directly need nothing extra.
+Guidance for AI coding agents working in this repository.
 
 ## What this is
 
