@@ -4,8 +4,8 @@ Release:        1%{?dist}
 URL:            http://www.kspei.com/projects/genfw/
 Source0:        http://ftp.kspei.com/pub/steve/genfw/%{name}-%{version}.tar.gz
 Group:          System Environment/Base
-License:        GPL
-Summary:        Tool for building iptables-based firewalls.
+License:        GPL-2.0-or-later
+Summary:        Tool for building iptables-based firewalls
 BuildArch:      noarch
 BuildRequires:  perl
 BuildRequires:  /usr/bin/pod2man
@@ -43,23 +43,23 @@ install -m 644 genfw.8 %{buildroot}/%{_mandir}/man8/genfw.8
 %files
 %defattr(-,root,root)
 %dir %{_sysconfdir}/sysconfig/genfw
-%config %{_unitdir}/genfw.service
+%{_unitdir}/genfw.service
 %{_sbindir}/genfw
 %{_mandir}/man8/genfw.8*
 
 %changelog
-* Sun Apr 30 2017 Steven Pritchard <steve@kspei.com> 1.50
+* Sun Apr 30 2017 Steven Pritchard <steve@kspei.com> - 1.50-1
 - Fix systemd unit to also work with network.service
 
-* Mon Feb 20 2017 Steven Pritchard <steve@kspei.com> 1.49
+* Mon Feb 20 2017 Steven Pritchard <steve@kspei.com> - 1.49-1
 - Add systemd unit
 - Modernize spec
 - Hard-code Version to eliminate mock build problem
 
-* Sun Feb 19 2017 Steven Pritchard <steve@kspei.com> 1.48
+* Sun Feb 19 2017 Steven Pritchard <steve@kspei.com> - 1.48-1
 - Fix parse_version() call
 
-* Mon Apr 14 2003 Steven Pritchard <steve@kspei.com> 1.28
+* Mon Apr 14 2003 Steven Pritchard <steve@kspei.com> - 1.28-1
 - Cleanup
 
 * Tue Jul 30 2002 Steven Pritchard <steve@kspei.com>

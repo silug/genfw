@@ -1,0 +1,4 @@
+# rpmlint configuration for genfw.
+#
+# "iptables" is the name of the tool this package drives, not a misspelling.
+addFilter(r"spelling-error .* iptables")

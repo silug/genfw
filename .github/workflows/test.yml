@@ -86,8 +86,11 @@ jobs:
           wc -l firewall.sh
           shellcheck firewall.sh
 
+      # rpmlint picks up genfw.rpmlintrc automatically. Its spelling filter
+      # only matches built packages, so tell rpmlint not to fail on the
+      # filter being unused for a bare spec.
       - name: rpmlint spec
-        run: rpmlint genfw.spec
+        run: rpmlint --ignore-unused-rpmlintrc genfw.spec
 
   rpm:
     name: RPM build and install (Fedora)
@@ -98,7 +101,7 @@ jobs:
         run: >-
           dnf install -y --setopt=install_weak_deps=False
           git make rpm-build rpmdevtools rpmlint 'dnf-command(builddep)'
-          perl perl-ExtUtils-MakeMaker systemd man-db
+          perl perl-ExtUtils-MakeMaker systemd man-db glibc-langpack-en
 
       - uses: actions/checkout@v4
 
@@ -115,12 +118,8 @@ jobs:
           rpmdev-setuptree
           rpmbuild -ta genfw-*.tar.gz
 
-      # Informational for now: the spec has pre-existing rpmlint findings
-      # (license tag, summary punctuation, conffile flag on the unit) that
-      # will be addressed separately. Fails only on rpmlint itself crashing.
       - name: rpmlint packages
-        continue-on-error: true
-        run: rpmlint ~/rpmbuild/RPMS/noarch/genfw-*.rpm genfw-*.src.rpm
+        run: rpmlint -r genfw.rpmlintrc ~/rpmbuild/RPMS/noarch/genfw-*.rpm genfw-*.src.rpm
 
       - name: Inspect package contents
         run: |
