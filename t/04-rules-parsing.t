@@ -82,11 +82,8 @@ RULES
 {
     my $res = run_rules("int eth1\nout eth0\npolicy OUTPUT DROP\npolicy nat:PREROUTING ACCEPT\n");
     ok((grep { $_ eq 'iptables -P OUTPUT DROP' } @{$res->{rules}}), 'policy overrides a filter chain');
-    TODO: {
-        local $TODO = 'set_policy reassigns its loop variable before the hash lookup, so the target is lost';
-        ok((grep { $_ eq 'iptables -t nat -P PREROUTING ACCEPT' } @{$res->{rules}}), 'policy accepts table:chain');
-    }
-    ok((grep { /^iptables -t nat -P PREROUTING/ } @{$res->{rules}}), 'policy with table:chain at least targets the right table and chain');
+    ok((grep { $_ eq 'iptables -t nat -P PREROUTING ACCEPT' } @{$res->{rules}}), 'policy accepts table:chain');
+    is(scalar(grep { /-P PREROUTING/ } @{$res->{rules}}), 1, 'table:chain policy is emitted exactly once');
     is((rules_in($res, 'OUTPUT'))[-1], "-m limit -j LOG --log-prefix 'OUTPUT fall-through: '",
         'OUTPUT gains a fall-through log once its policy is DROP');
 }

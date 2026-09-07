@@ -869,14 +869,13 @@ sub begin_script() {
 sub set_policy($) {
     my $policy=shift;
 
-    for my $chain (keys %{$policy}) {
-        if ($chain=~/^([^:]+):(.+)$/) {
-            my $table=$1;
-            $chain=$2;
+    for my $label (keys %{$policy}) {
+        if ($label=~/^([^:]+):(.+)$/) {
+            my ($table, $chain)=($1, $2);
 
-            iptables("-t", $table, "-P", $chain, $policy->{$chain});
+            iptables("-t", $table, "-P", $chain, $policy->{$label});
         } else {
-            iptables("-P", $chain, $policy->{$chain});
+            iptables("-P", $label, $policy->{$label});
         }
     }
 }
