@@ -86,10 +86,11 @@ jobs:
           wc -l firewall.sh
           shellcheck firewall.sh
 
-      # No rpmlintrc here: the spelling filter it carries only applies to
-      # built packages, and rpmlint flags it as unused on a bare spec.
+      # rpmlint picks up genfw.rpmlintrc automatically. Its spelling filter
+      # only matches built packages, so tell rpmlint not to fail on the
+      # filter being unused for a bare spec.
       - name: rpmlint spec
-        run: rpmlint genfw.spec
+        run: rpmlint --ignore-unused-rpmlintrc genfw.spec
 
   rpm:
     name: RPM build and install (Fedora)
