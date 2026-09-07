@@ -10,6 +10,12 @@ firewall from a small text `rules` file plus the host's Red Hat-style
 bottom of `genfw` (`perldoc ./genfw`); it covers every rules directive and
 interface flag and is the source for the man page.
 
+**Minimum Perl is 5.16 (EL7).** EL7 and EL8 are the only platforms genfw
+fully supports today, since they still ship `network-scripts` and the
+iptables compatibility layer, so nothing newer than 5.16 may be used in
+`genfw` or `t/`: no signatures, no postfix dereferencing, no `say`. The EL7
+job in CI enforces this; check there before assuming a construct is fine.
+
 Everything else is packaging or testing: `genfw.spec` and `genfw.rpmlintrc`
 (RPM), `genfw.service` (systemd oneshot), `firewall.init` (legacy SysV init),
 `install.sh`, `Makefile`, the test suite in `t/`, and CI in
