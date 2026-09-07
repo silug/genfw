@@ -84,7 +84,7 @@ jobs:
             iptables-restore --version
             cd t/sample
             perl ../../genfw -d 2>/dev/null > /tmp/sample.rules
-            iptables-restore < /tmp/sample.rules
+            perl ../../genfw -d -i 2>/dev/null
             echo "rules generated: $(grep -c "^-A" /tmp/sample.rules), loaded: $(iptables-save | grep -c "^-A")"
             test "$(grep -c "^-A" /tmp/sample.rules)" -eq "$(iptables-save | grep -c "^-A")"
           '

@@ -141,7 +141,8 @@ Non-obvious design points, each visible in `generate_rules`:
   `rule("[table:]chain", @iptables_args)`; comment helpers queue text that
   attaches to the next rule. An output backend in `%backend` then formats
   the whole thing (`format_iptables_restore`) and, under `-i`, pipes it to
-  the backend's loader. Record rules only through `rule()`, and add a new
+  the backend's `test` command first (`iptables-restore --test`) and then
+  its `apply` command. Record rules only through `rule()`, and add a new
   output format (an `nft -f` backend is planned) as a new formatter plus
   apply command in `%backend`, never by printing from generation code.
 - `filter:` is the default table and is stripped at parse time, so

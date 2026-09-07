@@ -176,16 +176,22 @@ sub policy_of {
 # fake_iptables_restore() -> ($bindir, $logfile)
 #
 # Creates a directory containing a fake "iptables-restore" that appends
-# everything it reads on stdin to $logfile. Prepend $bindir to PATH to
+# everything it reads on stdin to $logfile and its arguments, one
+# invocation per line, to "$logfile.args". Prepend $bindir to PATH to
 # exercise "genfw -i" without touching the real firewall. Set
-# GENFW_FAKE_EXIT in the environment to make the fake exit non-zero.
+# GENFW_FAKE_EXIT in the environment to make every invocation exit
+# non-zero, or GENFW_FAKE_EXIT_LOAD to fail only the real (non --test)
+# load.
 sub fake_iptables_restore {
     my $bindir = tempdir('genfw-fakebin-XXXXXX', TMPDIR => 1, CLEANUP => 1);
     my $logfile = "$bindir/iptables-restore.log";
     write_file("$bindir/iptables-restore", <<"EOS");
 #!/bin/sh
+printf '%s\\n' "\$*" >> '$logfile.args'
 cat >> '$logfile'
-exit \${GENFW_FAKE_EXIT:-0}
+if [ -n "\$GENFW_FAKE_EXIT" ]; then exit "\$GENFW_FAKE_EXIT"; fi
+if [ "\$*" != "--test" ] && [ -n "\$GENFW_FAKE_EXIT_LOAD" ]; then exit "\$GENFW_FAKE_EXIT_LOAD"; fi
+exit 0
 EOS
     chmod 0755, "$bindir/iptables-restore";
     return ($bindir, $logfile);

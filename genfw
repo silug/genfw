@@ -80,6 +80,7 @@ our %builtin=(
 our %backend=(
         'iptables-restore' => {
             'format' => \&format_iptables_restore,
+            'test'   => ['iptables-restore', '--test'],
             'apply'  => ['iptables-restore'],
         },
     );
@@ -179,6 +180,11 @@ generate_rules(%interface);
 my $text=$backend{$output}->{'format'}->(\%ruleset);
 
 if ($opt{'i'}) {
+    # Check the whole ruleset first. The loader commits one table at a
+    # time, so without this an error in a later table would leave earlier
+    # tables already replaced.
+    apply_ruleset($text, @{$backend{$output}->{'test'}})
+        if ($backend{$output}->{'test'});
     apply_ruleset($text, @{$backend{$output}->{'apply'}});
 } else {
     print $text;
@@ -1040,8 +1046,9 @@ sub quote_restore {
     return "\"$arg\"";
 }
 
-# Feed the formatted ruleset to the backend's loader. A failure here means
-# the firewall was not (or not fully) updated, so it is fatal.
+# Feed the formatted ruleset to a backend command (the loader, or its test
+# mode). A failure here means the firewall was not (or not fully) updated,
+# so it is fatal.
 sub apply_ruleset {
     my ($text, @command)=@_;
 
@@ -1084,8 +1091,10 @@ directly.
 =item B<-i>
 
 Install the ruleset: pipe it to C<iptables-restore> instead of printing it.
-A failure of C<iptables-restore> is fatal, since it means the firewall was
-not (or not fully) updated. This is what the systemd unit and the init
+The ruleset is first checked with C<iptables-restore --test>, so a ruleset
+that cannot be parsed is rejected before anything is changed; only then is
+it loaded. A failure at either step is fatal, since it means the firewall
+was not (or not fully) updated. This is what the systemd unit and the init
 script run.
 
 =item B<-d>

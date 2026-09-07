@@ -140,8 +140,10 @@ genfw -i                          # generate and load in one step (what the syst
 
 The ruleset lists every table, so loading it replaces the whole firewall:
 each table is swapped atomically by `iptables-restore`, and there is no
-window with a flushed, open firewall. Treat `-i` as a full reload. If
-`iptables-restore` rejects the ruleset, genfw exits non-zero and reports it.
+window with a flushed, open firewall. Treat `-i` as a full reload. Before
+loading, `-i` runs `iptables-restore --test` on the ruleset, so one that
+cannot be parsed is rejected before anything changes. If either step fails,
+genfw exits non-zero and reports it.
 On systems using the SysV script, `service firewall start` does the same and
 also loads any kernel modules listed in `/etc/sysconfig/genfw/modules`.
 

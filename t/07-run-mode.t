@@ -21,8 +21,8 @@ my %stable = (PERL_HASH_SEED => 0, PERL_PERTURB_KEYS => 0);
 # Script mode output, for comparison.
 my $script = run_genfw(make_fixture(rules => $rules, ifcfg => \%ifcfg), env => { %stable });
 
-# -i feeds the ruleset to iptables-restore on stdin, and it is exactly the
-# text that script mode prints.
+# -i checks the ruleset with "iptables-restore --test" and then loads it
+# with "iptables-restore", feeding each exactly the text script mode prints.
 {
     my ($bindir, $log) = fake_iptables_restore();
     my $res = run_genfw(
@@ -32,12 +32,11 @@ my $script = run_genfw(make_fixture(rules => $rules, ifcfg => \%ifcfg), env => {
     );
     is($res->{status}, 0, '-i exits 0');
     is($res->{stdout}, '', '-i prints nothing to stdout');
-    ok(length(read_file($log)), 'fake iptables-restore received input');
-    is(read_file($log), $script->{stdout}, '-i sends iptables-restore exactly what script mode prints');
+    is(read_file("$log.args"), "--test\n\n", 'iptables-restore is run with --test first, then for real');
+    is(read_file($log), $script->{stdout} x 2, 'both invocations receive exactly what script mode prints');
 }
 
-# An iptables-restore failure means the firewall was not (fully) loaded, so
-# it is fatal rather than a warning.
+# A --test failure stops before anything is loaded.
 {
     my ($bindir, $log) = fake_iptables_restore();
     my $res = run_genfw(
@@ -45,9 +44,22 @@ my $script = run_genfw(make_fixture(rules => $rules, ifcfg => \%ifcfg), env => {
         opts => ['-i', '-d'],
         env  => { %stable, PATH => "$bindir:$ENV{PATH}", GENFW_FAKE_EXIT => 3 },
     );
-    isnt($res->{status}, 0, 'iptables-restore failure makes genfw exit non-zero');
-    ok((grep { /'iptables-restore' failed with exit value 3/ } @{$res->{warnings}}), 'failure message names the loader and its exit value');
-    ok(length(read_file($log)), 'the ruleset was still sent in full before the failure was reported');
+    isnt($res->{status}, 0, 'a --test failure makes genfw exit non-zero');
+    ok((grep { /'iptables-restore --test' failed with exit value 3/ } @{$res->{warnings}}), 'failure message names the test step and its exit value');
+    is(read_file("$log.args"), "--test\n", 'the real load is never attempted after --test fails');
+}
+
+# A failure of the real load is fatal too, and says so.
+{
+    my ($bindir, $log) = fake_iptables_restore();
+    my $res = run_genfw(
+        make_fixture(rules => $rules, ifcfg => \%ifcfg),
+        opts => ['-i', '-d'],
+        env  => { %stable, PATH => "$bindir:$ENV{PATH}", GENFW_FAKE_EXIT_LOAD => 4 },
+    );
+    isnt($res->{status}, 0, 'a load failure makes genfw exit non-zero');
+    ok((grep { /'iptables-restore' failed with exit value 4/ } @{$res->{warnings}}), 'failure message names the load step and its exit value');
+    is(read_file("$log.args"), "--test\n\n", 'the load was attempted after --test passed');
 }
 
 # The header identifies the format and how to load it.
