@@ -33,7 +33,26 @@ wishlist.
 
 ## Installation
 
-From the RPM (Fedora, RHEL, and derivatives):
+Each [release](https://github.com/silug/genfw/releases) ships a single
+`noarch` RPM that installs on EL7, EL8, EL9, and Fedora, plus the source RPM
+and tarball. The RPMs and tarball are GPG-signed; the public key is attached
+to the release as `RPM-GPG-KEY-genfw`. To verify and install:
+
+```sh
+rpm --import RPM-GPG-KEY-genfw
+rpm -K genfw-<version>-1.noarch.rpm          # expect "OK"
+dnf install ./genfw-<version>-1.noarch.rpm   # yum localinstall on EL7
+systemctl enable genfw.service
+```
+
+Release assets also carry GitHub build provenance, which ties them to the
+workflow run and commit that produced them:
+
+```sh
+gh attestation verify genfw-<version>-1.noarch.rpm --owner silug
+```
+
+To build the RPM yourself from a checkout:
 
 ```sh
 make dist            # produces genfw-<version>.tar.gz and genfw-<version>-1.src.rpm
