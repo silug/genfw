@@ -1,0 +1,155 @@
+name: Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test suite (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Primary target: current Fedora. Core perl is split into many
+          # small packages here, so each module is listed explicitly.
+          - name: Fedora
+            container: fedora:latest
+            install: >-
+              dnf install -y --setopt=install_weak_deps=False
+              git make perl perl-DirHandle perl-Test-Simple perl-Test-Harness
+              perl-Test-Pod perl-ExtUtils-MakeMaker perl-podlators
+          # Enterprise Linux 9 (perl-Test-Pod is EPEL-only; the POD test
+          # skips itself when the module is missing).
+          - name: EL9
+            container: almalinux:9
+            install: >-
+              dnf install -y --setopt=install_weak_deps=False
+              git make perl perl-DirHandle perl-Test-Simple perl-Test-Harness
+              perl-ExtUtils-MakeMaker perl-podlators
+          # Debian-family runner with a stock perl, which bundles the core
+          # modules. Runs directly on the host runner (no container).
+          - name: Ubuntu
+            container: ''
+            install: >-
+              sudo apt-get update -q &&
+              sudo apt-get install -y -q --no-install-recommends
+              make perl libtest-pod-perl netbase
+    steps:
+      - name: Install dependencies
+        run: ${{ matrix.install }}
+
+      - uses: actions/checkout@v4
+
+      - name: Show perl version
+        run: perl -v | sed -n 2p
+
+      - name: Run tests
+        run: make test
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install tools
+        run: >-
+          dnf install -y --setopt=install_weak_deps=False
+          git perl perl-DirHandle ShellCheck rpmlint
+
+      - uses: actions/checkout@v4
+
+      # install.sh is POSIX sh. firewall.init sources /etc/init.d/functions,
+      # which is bash, so it is checked as bash.
+      - name: shellcheck shell scripts
+        run: |
+          shellcheck --severity=warning install.sh
+          shellcheck --severity=warning --shell=bash firewall.init
+
+      # genfw's script-mode output is itself a shell script; make sure it is
+      # a well-formed one.
+      - name: shellcheck generated firewall script
+        working-directory: t/sample
+        run: |
+          perl ../../genfw -d 2>/dev/null > firewall.sh
+          wc -l firewall.sh
+          shellcheck firewall.sh
+
+      - name: rpmlint spec
+        run: rpmlint genfw.spec
+
+  rpm:
+    name: RPM build and install (Fedora)
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install build tools
+        run: >-
+          dnf install -y --setopt=install_weak_deps=False
+          git make rpm-build rpmdevtools rpmlint 'dnf-command(builddep)'
+          perl perl-ExtUtils-MakeMaker systemd man-db
+
+      - uses: actions/checkout@v4
+
+      - name: Install BuildRequires from the spec
+        run: dnf builddep -y genfw.spec
+
+      - name: Build tarball and source RPM
+        run: make dist
+
+      # Building from the tarball runs %prep, %build, %check (the test
+      # suite), and %install exactly as a packager would see them.
+      - name: Build binary RPM
+        run: |
+          rpmdev-setuptree
+          rpmbuild -ta genfw-*.tar.gz
+
+      # Informational for now: the spec has pre-existing rpmlint findings
+      # (license tag, summary punctuation, conffile flag on the unit) that
+      # will be addressed separately. Fails only on rpmlint itself crashing.
+      - name: rpmlint packages
+        continue-on-error: true
+        run: rpmlint ~/rpmbuild/RPMS/noarch/genfw-*.rpm genfw-*.src.rpm
+
+      - name: Inspect package contents
+        run: |
+          rpm -qlp ~/rpmbuild/RPMS/noarch/genfw-*.rpm
+          rpm -qp --requires ~/rpmbuild/RPMS/noarch/genfw-*.rpm
+
+      # Installing checks that every Requires (including the ones
+      # perl-generators derives from "use" lines) resolves in a clean
+      # Fedora, then exercises the installed files.
+      # tsflags is cleared because container images set tsflags=nodocs, which
+      # would skip the man page we want to check.
+      - name: Install the package
+        run: >-
+          dnf install -y --setopt=install_weak_deps=False --setopt=tsflags=
+          ~/rpmbuild/RPMS/noarch/genfw-*.rpm
+
+      - name: Smoke test installed files
+        run: |
+          set -x
+          test -x /usr/sbin/genfw
+          test -f /usr/share/man/man8/genfw.8.gz
+          man -w genfw
+          systemd-analyze verify /usr/lib/systemd/system/genfw.service
+          cd t/sample && /usr/sbin/genfw -d 2>/dev/null | grep -c '^iptables '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpms
+          path: |
+            ~/rpmbuild/RPMS/noarch/genfw-*.rpm
+            genfw-*.src.rpm
+          if-no-files-found: error

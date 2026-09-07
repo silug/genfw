@@ -1,8 +1,21 @@
-FILES   = genfw firewall.init Makefile install.sh genfw.spec TODO genfw.service
+FILES   = genfw firewall.init Makefile install.sh genfw.spec TODO genfw.service t
 VERSION = $(shell perl -MExtUtils::MakeMaker \
                        -le 'print ExtUtils::MM->parse_version("genfw")')
 
 all:
+
+# Runs the test suite in t/. Uses prove (perl-Test-Harness) when available,
+# otherwise runs each test file directly.
+test:
+	@if command -v prove >/dev/null 2>&1 ; then \
+	    prove t ; \
+	else \
+	    rc=0 ; \
+	    for t in t/*.t ; do \
+	        echo "# $$t" ; perl $$t || rc=1 ; \
+	    done ; \
+	    exit $$rc ; \
+	fi
 
 install:
 	./install.sh
@@ -14,7 +27,7 @@ clean:
 
 genfw-$(VERSION).tar.gz:
 	mkdir genfw-$(VERSION)
-	cp $(FILES) genfw-$(VERSION)/
+	cp -r $(FILES) genfw-$(VERSION)/
 	tar -zcvf genfw-$(VERSION).tar.gz genfw-$(VERSION)
 
 genfw-$(VERSION)-1.src.rpm: genfw-$(VERSION).tar.gz

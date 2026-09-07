@@ -11,6 +11,8 @@ BuildRequires:  perl
 BuildRequires:  /usr/bin/pod2man
 BuildRequires:  systemd
 BuildRequires:  perl-generators
+BuildRequires:  perl(Test::More)
+BuildRequires:  perl(DirHandle)
 Requires:       iptables
 Requires:       perl(Data::Dumper)
 Requires:       systemd-units
@@ -24,6 +26,9 @@ firewall by using a simple text-based configuration file.
 
 %build
 pod2man genfw > genfw.8
+
+%check
+perl -e 'for (glob("t/*.t")) { system($^X, $_) == 0 or die "$_ failed\n" }'
 
 %install
 mkdir -p %{buildroot}/%{_unitdir} \

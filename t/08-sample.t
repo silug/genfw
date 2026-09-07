@@ -1,0 +1,36 @@
+#!/usr/bin/perl
+# The sample configuration in t/sample must keep generating cleanly; CI
+# feeds its output to shellcheck.
+use strict;
+use warnings;
+use lib 't/lib';
+use GenfwTest;
+use Test::More;
+use Cwd qw(abs_path);
+use File::Spec;
+
+# The sample uses allow= with service names, which need /etc/services.
+plan skip_all => 'getservbyname() cannot resolve ssh/tcp: /etc/services missing? (install setup or netbase)'
+    unless getservbyname('ssh', 'tcp') && getservbyname('https', 'tcp');
+
+my ($vol, $dir) = File::Spec->splitpath(abs_path(__FILE__));
+my $sample = File::Spec->catdir($dir, 'sample');
+ok(-d "$sample/genfw" && -d "$sample/network-scripts", "sample config tree exists at $sample");
+
+my $res = run_genfw($sample);
+is($res->{status}, 0, 'sample config generates successfully');
+is_deeply($res->{warnings}, [], 'sample config generates no warnings')
+    or diag(join "\n", @{$res->{warnings}});
+like($res->{stdout}, qr/\A#!\/bin\/sh\n/, 'output is a shell script');
+ok(scalar(@{$res->{rules}}) > 50, 'sample produces a substantial ruleset');
+
+# Spot-check that each part of the sample took effect.
+ok((grep { $_ eq 'badflags' } chains_created($res)), 'rules.d drop-in defined its chain');
+ok((grep { /-j SNAT|-j MASQUERADE/ } rules_in($res, 'POSTROUTING', 'nat')), 'nat flag produced NAT rules');
+ok((grep { /REDIRECT --to 3128/ } rules_in($res, 'PREROUTING', 'nat')), 'transparent proxy rule present');
+ok((grep { /--dport https -j acceptnew/ } rules_in($res, 'world-dmz')), 'allow= on dmz honored with labels');
+ok((grep { /--dport ssh -j acceptnew/ } rules_in($res, 'inside-dmz')) || (grep { $_ eq '-j acceptnew' } rules_in($res, 'inside-dmz')),
+    'inside -> dmz is open (trusted)');
+ok(!(grep { /--dport ssh/ } rules_in($res, 'world-dmz')), 'ssh into dmz is not open from the outside');
+
+done_testing;

@@ -1,0 +1,7 @@
+# Example of a drop-in rules file: refuse obviously bad TCP flag combinations.
+chain badflags Drop invalid TCP flag combinations.
+append badflags -p tcp --tcp-flags ALL NONE -j DROP
+append badflags -p tcp --tcp-flags SYN,FIN SYN,FIN -j DROP
+append badflags -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
+insert FORWARD -p tcp -j badflags
+insert INPUT -p tcp -j badflags
