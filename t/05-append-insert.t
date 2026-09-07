@@ -159,10 +159,7 @@ RULES
     # "has\ spaces" is split on whitespace by the parser, so the backslash
     # survives as a literal and is quoted; this documents current behavior.
     ok((grep { /--comment 'has\\'/ } @input), 'backslash is quoted, not interpreted');
-    TODO: {
-        local $TODO = q{iptables() substitutes ' with ''' instead of '\'' so the shell drops the quote};
-        ok((grep { /--string 'it'\\''s'/ } @input), "embedded single quote is escaped as '\\''");
-    }
+    ok((grep { /--string 'it'\\''s'/ } @input), "embedded single quote is escaped as '\\''");
 }
 
 done_testing;
