@@ -107,12 +107,10 @@ jobs:
           for grip in $(gpg --list-secret-keys --with-colons --with-keygrip | awk -F: '/^grp/ {print $10}'); do
             /usr/libexec/gpg-preset-passphrase --preset --passphrase "$GPG_PASSPHRASE" "$grip"
           done
+          # The public key ships as a release asset; it is not kept in the
+          # repository, so rotating the key only means replacing the secrets.
           gpg --armor --export "$fpr" > dist/RPM-GPG-KEY-genfw
           gpg --show-keys dist/RPM-GPG-KEY-genfw
-          # The committed public key must be the one we are signing with,
-          # so that what users import from the repo verifies the release.
-          committed=$(gpg --show-keys --with-colons RPM-GPG-KEY-genfw | awk -F: '/^fpr/ {print $10; exit}')
-          [ "$committed" = "$fpr" ] || { echo "::error::RPM-GPG-KEY-genfw in the repo ($committed) is not the signing key ($fpr)"; exit 1; }
 
       - name: Sign the RPMs and the tarball
         if: env.GPG_PRIVATE_KEY != ''
