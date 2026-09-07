@@ -1,0 +1,24 @@
+# Sample genfw configuration: a three-interface gateway.
+#
+# This tree is used by t/08-sample.t and by CI, which runs shellcheck on the
+# script genfw generates from it. Run it by hand from this directory with:
+#
+#     cd t/sample && perl ../../genfw -d
+
+# Inside network, NATed to the outside, allowed to reach the DMZ freely.
+internal eth1 nat trusted label=inside
+
+# DMZ hosts: reachable from the outside on web and DNS, ssh only from inside.
+dmz eth2 nat allow=http/tcp,https/tcp,domain allow=ssh/tcp:::eth1 label=dmz
+
+# Outside (DHCP) interface.
+outside eth0 label=world
+
+limit logging
+
+# Local services on the gateway itself.
+append INPUT -i eth1 -p tcp --dport ssh -j acceptnew
+append INPUT -i eth0 -p tcp --dport ssh -m limit --limit 3/min -j acceptnew
+
+# Transparent proxy for inside web traffic.
+append nat:PREROUTING -i eth1 -p tcp --dport 80 -j REDIRECT --to 3128
