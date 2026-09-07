@@ -58,6 +58,29 @@ jobs:
       - name: Run tests
         run: make test
 
+  # EL7 and EL8 are the only platforms genfw fully supports today (they still
+  # have network-scripts and the iptables compatibility layer), so Perl 5.16
+  # is the floor. CentOS 7 is too old for the Node runtime GitHub Actions
+  # uses, so it cannot be a job container; run it with docker from the host
+  # instead. Its mirrors are gone, so yum is pointed at the vault.
+  el7:
+    name: Test suite (EL7, Perl 5.16)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the suite in a CentOS 7 container
+        run: |
+          docker run --rm -v "$PWD:/src:ro" quay.io/centos/centos:7 bash -e -c '
+            sed -i -e "s|^mirrorlist=|#mirrorlist=|g" \
+                   -e "s|^#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g" \
+                   /etc/yum.repos.d/CentOS-*.repo
+            yum install -y -q perl perl-Test-Simple perl-Test-Harness perl-ExtUtils-MakeMaker make
+            cp -r /src /work && cd /work
+            perl -v | sed -n 2p
+            make test
+          '
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
