@@ -166,4 +166,4 @@ Contributions go through pull requests against `master`.
 
 ## License
 
-GPL-2.0-or-later. Copyright (C) 2001-2010 Steven Pritchard.
+GPL-2.0-or-later. Copyright (C) 2001-2026 Steven Pritchard.
