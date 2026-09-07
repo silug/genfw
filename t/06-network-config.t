@@ -118,6 +118,26 @@ my %ifcfg = (
     ok((grep { $_ eq 'eth1-eth0' } chains_created($res)), 'empty label falls back to interface name');
 }
 
+# --- Flag parsing: unknown flags warn and are ignored; boolean flags take
+#     no value; duplicate labels warn and the first wins; empty allow= is
+#     harmless.
+{
+    my $res = run_genfw(make_fixture(
+        rules => "int eth1 nat frobnicate trusted=yes label=in label=other allow=\nout eth0\n",
+        ifcfg => \%ifcfg,
+    ));
+    is($res->{status}, 0, 'bad flags are not fatal');
+    ok((grep { /Ignoring unsupported flag 'frobnicate' on interface eth1/ } @{$res->{warnings}}), 'unknown flag warns');
+    ok((grep { /Ignoring unsupported flag 'trusted=yes' on interface eth1/ } @{$res->{warnings}}), 'boolean flag with a value warns');
+    ok((grep { $_ eq '-j DROP' } rules_in($res, 'in-eth0')), 'trusted=yes did not make the interface trusted');
+    ok((grep { /Ignoring duplicate label 'other' on interface eth1 \(using 'in'\)/ } @{$res->{warnings}}), 'duplicate label warns');
+    ok((grep { $_ eq 'in' } chains_created($res)), 'first label wins');
+    ok(!(grep { $_ eq 'other' } chains_created($res)), 'second label is not used');
+    ok((grep { /-j MASQUERADE/ } rules_in($res, 'POSTROUTING', 'nat')), 'valid flags on the same line still apply');
+    ok(!(grep { /allow/ } @{$res->{warnings}}), 'empty allow= produces no warning');
+    is(scalar(@{$res->{warnings}}), 3, 'exactly the three expected warnings') or diag(join "\n", @{$res->{warnings}});
+}
+
 # --- Chain name length limit.
 {
     my $res = run_genfw(make_fixture(
