@@ -722,9 +722,12 @@ sub parserules($) {
             #       . "(rules line $.).\n";
             #    next;
             #}
-            $parts[0]=~s/^filter://;
+            # "filter" is the default table, so "filter:INPUT" and "INPUT"
+            # must refer to the same chain.
+            $parts[1]=~s/^filter://;
             push(@{$conf{$parts[0]}->{$parts[1]}}, [@parts[2..$#parts]]);
         } elsif ($parts[0] eq "chain" and defined($parts[1])) {
+            $parts[1]=~s/^filter://;
             if ($conf{$parts[0]}
                 and grep { $parts[1] eq $_ } keys(%{$conf{$parts[0]}})) {
                 warn "Not re-declaring chain '$parts[1]'!\n";
@@ -744,6 +747,7 @@ sub parserules($) {
                 parserules($rule_file) if (-e $rule_file);
             }
         } elsif ($parts[0] eq "policy" and scalar(@parts) == 3) {
+            $parts[1]=~s/^filter://;
             warn "Bad $parts[1] policy target '$parts[2]'\n"
                 unless ($parts[2] =~ /^(ACCEPT|DROP|QUEUE|RETURN)$/);
             $conf{$parts[0]}->{$parts[1]}=$parts[2];

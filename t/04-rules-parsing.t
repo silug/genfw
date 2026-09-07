@@ -115,6 +115,24 @@ RULES
     is(scalar(grep { $_ eq 'mychain' } chains_created($res)), 1, 'duplicate chain is created once');
 }
 
+# --- "filter:" prefix on chain and policy is the same as no prefix.
+{
+    my $res = run_rules(<<'RULES');
+int eth1
+out eth0
+chain filter:mychain
+append mychain -p tcp --dport 8080 -j ACCEPT
+chain mychain
+policy filter:OUTPUT DROP
+RULES
+    is(scalar(grep { $_ eq 'mychain' } chains_created($res)), 1, 'chain filter:NAME creates NAME once');
+    ok((grep { /Not re-declaring chain 'mychain'/ } @{$res->{warnings}}), 'chain filter:NAME and chain NAME are the same chain');
+    is_deeply([rules_in($res, 'mychain')], ['-p tcp --dport 8080 -j ACCEPT'], 'append to a chain declared with filter: works');
+    is_deeply([grep { /-P OUTPUT/ } @{$res->{rules}}], ['iptables -P OUTPUT DROP'], 'policy filter:OUTPUT sets the filter OUTPUT policy exactly once');
+    is((rules_in($res, 'OUTPUT'))[-1], "-m limit -j LOG --log-prefix 'OUTPUT fall-through: '",
+        'policy filter:OUTPUT DROP enables the fall-through log');
+}
+
 # --- User chains come after genfw chains and before interface chains.
 {
     my $res = run_rules("int eth1\nout eth0\nchain mychain\n");
