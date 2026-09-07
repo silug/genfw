@@ -1,5 +1,5 @@
 Name:           genfw
-Version:        1.50
+Version:        1.51.0
 Release:        1%{?dist}
 URL:            http://www.kspei.com/projects/genfw/
 Source0:        http://ftp.kspei.com/pub/steve/genfw/%{name}-%{version}.tar.gz
@@ -48,6 +48,19 @@ install -m 644 genfw.8 %{buildroot}/%{_mandir}/man8/genfw.8
 %{_mandir}/man8/genfw.8*
 
 %changelog
+* Mon Sep 07 2026 Steven Pritchard <steve@kspei.com> - 1.51.0-1
+- Output is now an iptables-restore ruleset (loaded atomically, one table at
+  a time) instead of a shell script of iptables commands; -i checks it with
+  iptables-restore --test and then loads it. The file starts with a
+  #!/usr/sbin/iptables-restore line so a saved copy can still be executed.
+- Fix "append filter:CHAIN" being silently ignored, "policy table:CHAIN"
+  emitting an empty target, and embedded quotes breaking script output.
+- Parse interface flags once; unknown flags and duplicate labels now warn.
+- Add a test suite (run in %%check), GitHub Actions CI, README, and a
+  signed release workflow.
+- License tag is now the SPDX identifier GPL-2.0-or-later.
+- Switch to semantic versioning.
+
 * Sun Apr 30 2017 Steven Pritchard <steve@kspei.com> - 1.50-1
 - Fix systemd unit to also work with network.service
 
