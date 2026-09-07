@@ -66,9 +66,13 @@ jobs:
       - name: Install tools
         run: >-
           dnf install -y --setopt=install_weak_deps=False
-          git perl perl-DirHandle ShellCheck rpmlint
+          git perl perl-DirHandle perl-Perl-Critic ShellCheck rpmlint
 
       - uses: actions/checkout@v4
+
+      # Severity and output format come from .perlcriticrc in the repo root.
+      - name: perlcritic
+        run: perlcritic genfw t/lib/GenfwTest.pm t/*.t
 
       # install.sh is POSIX sh. firewall.init sources /etc/init.d/functions,
       # which is bash, so it is checked as bash.

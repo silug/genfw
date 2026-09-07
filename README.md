@@ -159,8 +159,9 @@ prove -v t/03-allow.t   # one test file
 
 The suite in `t/` exercises the script as a black box against throwaway
 configurations and never touches the real firewall. GitHub Actions runs it on
-Fedora, EL9, and Ubuntu, lints the shell scripts and the generated output,
-and builds and installs the RPM. See `.github/workflows/test.yml`.
+Fedora, EL9, and Ubuntu, runs `perlcritic` on the script and tests, lints the
+shell scripts and the generated output, and builds and installs the RPM. See
+`.github/workflows/test.yml`.
 
 Contributions go through pull requests against `master`.
 

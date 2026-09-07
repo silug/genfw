@@ -22,6 +22,7 @@ make test                     # run the test suite (prove if installed, else pla
 prove -v t/03-allow.t         # one test file, verbose (run from the repo root)
 
 perl -c genfw                 # syntax check
+perlcritic genfw t/lib/GenfwTest.pm t/*.t   # style check; CI enforces this, config in .perlcriticrc
 perldoc ./genfw               # read the docs / verify POD renders
 
 make dist                     # tarball + .src.rpm in cwd (version parsed from $VERSION in genfw)
