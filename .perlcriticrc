@@ -1,0 +1,12 @@
+# Perl::Critic configuration for genfw. Enforced by CI on genfw and t/.
+#
+# Severity 5 ("gentle") is perlcritic's default and the level this code is
+# kept clean at. Run the same check locally with:
+#
+#     perlcritic genfw t/lib/GenfwTest.pm t/*.t
+#
+# Prefer fixing a finding over exempting it. When an exemption is the right
+# answer, use an inline "## no critic (PolicyName)" with a comment saying
+# why, so the reason stays next to the code.
+severity = 5
+verbose = %f:%l:%c: [%p] %m\n

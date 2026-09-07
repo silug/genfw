@@ -25,34 +25,34 @@ use DirHandle;
 use Socket;
 use Getopt::Std;
 
-sub reject_auth($$);
-sub check_allowed($$);
-sub allow($$@);
-sub label($);
-sub icmpfilter($$);
-sub established($$);
-sub drop($$);
-sub accept($$);
-sub acceptnew($$);
-sub filter_from($$);
-sub filter_to($$$);
-sub generate_rules(%);
-sub parserules($);
-sub parseconfig($$);
-sub debug(@);
-sub bold($);
-sub generate_rules(%);
-sub comment_block(@);
-sub comment_long(@);
-sub comment(@);
-sub begin_script();
-sub set_policy($);
-sub iptables(@);
-sub new_chain($);
-sub insert($);
-sub append($);
-sub action($$);
-sub clear_all();
+sub reject_auth;
+sub check_allowed;
+sub allow;
+sub label;
+sub icmpfilter;
+sub established;
+sub drop;
+sub accept;
+sub acceptnew;
+sub filter_from;
+sub filter_to;
+sub generate_rules;
+sub parserules;
+sub parseconfig;
+sub debug;
+sub bold;
+sub generate_rules;
+sub comment_block;
+sub comment_long;
+sub comment;
+sub begin_script;
+sub set_policy;
+sub iptables;
+sub new_chain;
+sub insert;
+sub append;
+sub action;
+sub clear_all;
 
 our $VERSION="1.50";
 
@@ -155,7 +155,7 @@ generate_rules(%interface);
 # Subs
 #
 
-sub reject_auth($$) {
+sub reject_auth {
     my ($in, $out)=@_;
 
     iptables "-A", label($in) . "-" . label($out),
@@ -164,7 +164,7 @@ sub reject_auth($$) {
            qw(-p udp --dport 113 -j REJECT --reject-with icmp-port-unreachable);
 }
 
-sub check_allowed($$) {
+sub check_allowed {
     my ($in, $out)=@_;
 
     debug "checking for allowed traffic to interface $out";
@@ -187,7 +187,7 @@ sub check_allowed($$) {
                 next;
             }
             my $found=0;
-            for $proto ("tcp", "udp") {
+            for my $proto ("tcp", "udp") {
                 if (getservbyname($port, $proto)) {
                     push(@open_port, [$port, $proto, $from, $to]);
                     $found++;
@@ -223,7 +223,7 @@ sub check_allowed($$) {
     }
 }
 
-sub allow($$@) {
+sub allow {
     my ($in, $out, $port, $proto, $from, $to)=@_;
 
     iptables "-A", label($in) . "-" . label($out),
@@ -232,7 +232,7 @@ sub allow($$@) {
              qw(-j acceptnew);
 }
 
-sub label($) {
+sub label {
     my ($name)=@_;
 
     my $label=$interface{$name}->{'flags'}->{'label'};
@@ -240,7 +240,7 @@ sub label($) {
     return (defined($label) and length($label)) ? $label : $name;
 }
 
-sub generate_rules(%) {
+sub generate_rules {
     my %interface=@_;
 
     # Check chain name lengths.  Error out if they're too long.
@@ -555,19 +555,19 @@ sub generate_rules(%) {
     }
 }
 
-sub icmpfilter($$) {
+sub icmpfilter {
     my ($in, $out)=@_;
 
     iptables "-A", label($in) . "-" . label($out), qw(-j icmp-filter);
 }
 
-sub established($$) {
+sub established {
     my ($in, $out)=@_;
 
     iptables "-A", label($in) . "-" . label($out), qw(-j established);
 }
 
-sub drop($$) {
+sub drop {
     my ($in, $out)=@_;
 
     iptables "-A", label($in) . "-" . label($out), @{$conf{'log'}},
@@ -577,19 +577,19 @@ sub drop($$) {
     iptables "-A", label($in) . "-" . label($out), qw(-j DROP);
 }
 
-sub accept($$) {
+sub accept {
     my ($in, $out)=@_;
 
     iptables "-A", label($in) . "-" . label($out), qw(-j ACCEPT);
 }
 
-sub acceptnew($$) {
+sub acceptnew {
     my ($in, $out)=@_;
 
     iptables "-A", label($in) . "-" . label($out), qw(-j acceptnew);
 }
 
-sub filter_from($$) {
+sub filter_from {
     my ($in, $item)=@_;
 
     debug "$in, filtering from $item";
@@ -617,7 +617,7 @@ sub filter_from($$) {
     }
 }
 
-sub filter_to($$$) {
+sub filter_to {
     my ($in, $out, $item)=@_;
 
     debug "$in -> $out, filtering to $item";
@@ -646,7 +646,7 @@ sub filter_to($$$) {
     }
 }
 
-sub parserules($) {
+sub parserules {
     my $file=shift;
 
     my $fh=new FileHandle $file, "r"
@@ -782,7 +782,7 @@ sub parserules($) {
     }
 }
 
-sub parseconfig($$) {
+sub parseconfig {
     my ($configfile, $name)=@_;
     my %cfg;
 
@@ -845,7 +845,7 @@ sub parseconfig($$) {
     return %cfg;
 }
 
-sub debug(@) {
+sub debug {
     return unless (defined($ENV{'DEBUG'}) || $opt{'d'});
     if (!@_) {
         print STDERR "\n";
@@ -855,19 +855,20 @@ sub debug(@) {
     }
 }
 
-sub bold($) {
-    return @_ if (!-t STDERR);
+sub bold {
+    # IO::Interactive is not a core module, so keep the plain -t test.
+    return @_ if (!-t STDERR); ## no critic (InputOutput::ProhibitInteractiveTest)
     return "\033[37;1m" . $_[0] . "\033[0m";
 }
 
-sub comment_block(@) {
+sub comment_block {
     return if ($opt{'i'});
 
     print "\n####";
     comment_long(@_);
 }
 
-sub comment_long(@) {
+sub comment_long {
     return if ($opt{'i'});
 
     print "\n#\n";
@@ -875,7 +876,7 @@ sub comment_long(@) {
     print "#\n";
 }
 
-sub comment(@) {
+sub comment {
     return if ($opt{'i'});
 
     for my $line (@_) {
@@ -883,13 +884,13 @@ sub comment(@) {
     }
 }
 
-sub begin_script() {
+sub begin_script {
     return if ($opt{'i'});
 
     print "#!/bin/sh\n";
 }
 
-sub set_policy($) {
+sub set_policy {
     my $policy=shift;
 
     for my $label (keys %{$policy}) {
@@ -903,7 +904,7 @@ sub set_policy($) {
     }
 }
 
-sub iptables(@) {
+sub iptables {
     my @command=("iptables");
 
     if ($opt{'i'}) {
@@ -925,7 +926,7 @@ sub iptables(@) {
     }
 }
 
-sub new_chain($) {
+sub new_chain {
     my $chain=$_[0];
     my $table;
 
@@ -943,15 +944,15 @@ sub new_chain($) {
     iptables(@args);
 }
 
-sub insert($) {
+sub insert {
     action('insert', $_[0]);
 }
 
-sub append($) {
+sub append {
     action('append', $_[0]);
 }
 
-sub action($$) {
+sub action {
     my ($action, $label)=@_;
     my $table=undef;
     my $chain;
@@ -975,7 +976,7 @@ sub action($$) {
     }
 }
 
-sub clear_all() {
+sub clear_all {
     iptables "-F";
     iptables "-X";
     iptables qw(-t nat -F);
