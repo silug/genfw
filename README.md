@@ -10,8 +10,10 @@ deny on `INPUT` and `FORWARD`.
 
 The output is a complete ruleset in `iptables-restore` format, the same
 format `iptables-save` produces, so you can read it, diff it against a running
-system, or load it in one atomic step. With `-i` genfw loads it directly,
-which is what the systemd unit does at boot.
+system, or load it in one atomic step. It starts with a
+`#!/usr/sbin/iptables-restore` line, so a saved copy can be made executable
+and run to load itself. With `-i` genfw loads it directly, which is what the
+systemd unit does at boot.
 
 ## Status
 
@@ -134,7 +136,8 @@ checkout.
 
 ```sh
 genfw > firewall.rules            # print the ruleset to review
-iptables-restore < firewall.rules # load it by hand
+iptables-restore < firewall.rules # load it by hand...
+chmod +x firewall.rules && ./firewall.rules   # ...or run it; the #! line invokes iptables-restore
 genfw -i                          # generate and load in one step (what the systemd unit does)
 ```
 

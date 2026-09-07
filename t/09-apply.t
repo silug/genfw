@@ -55,6 +55,19 @@ sub load_and_save {
     like($saved, qr/^:inside-world - /m, 'labelled pair chain exists');
     like($saved, qr/^-A POSTROUTING .* -j MASQUERADE$/m, 'NAT rule survived');
     like($saved, qr/--log-prefix "world -> inside: "/, 'log prefix with spaces survived intact');
+
+    # The "#!" line means a saved copy can be executed to load itself.
+  SKIP: {
+        skip '/usr/sbin/iptables-restore not present, so the shebang cannot be exercised here', 2
+            unless -x '/usr/sbin/iptables-restore';
+        my ($fh, $file) = tempfile('genfw-exec-XXXXXX', TMPDIR => 1, UNLINK => 1);
+        print $fh $res->{stdout};
+        close $fh;
+        chmod 0755, $file;
+        my $out = qx(unshare -rn sh -c '"$file" && iptables-save' 2>&1);
+        is($? >> 8, 0, 'executing the saved ruleset directly loads it') or diag($out);
+        is(scalar(grep { /^-A / } split /\n/, $out), $generated, 'direct execution loaded every rule');
+    }
 }
 
 # --- Awkward arguments: quotes and backslashes must round-trip.
