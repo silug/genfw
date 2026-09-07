@@ -1,0 +1,230 @@
+name: Release
+
+# Builds, signs, verifies, and publishes a release when a version tag is
+# pushed. Creating a release in the GitHub UI also creates the tag and so
+# triggers this; the release step then updates that release instead of
+# creating a new one. Either order works.
+#
+# Tag format: v<version>[-<suffix>]. <version> must equal $VERSION in genfw
+# and Version: in genfw.spec. A suffix (v1.51-rc1) marks a prerelease and
+# lets the pipeline be exercised without publishing a "latest" release.
+#
+# Signing uses a GPG key from the "release" environment's secrets
+# (GPG_PRIVATE_KEY, GPG_PASSPHRASE). Protect that environment with a
+# required reviewer so a release needs a human approval. A prerelease can
+# run without the key (assets are then unsigned and the job says so); a
+# real release requires it.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and sign
+    runs-on: ubuntu-latest
+    environment: release
+    container: fedora:latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    env:
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+    steps:
+      - name: Install build and signing tools
+        run: >-
+          dnf install -y --setopt=install_weak_deps=False
+          git make rpm-build rpm-sign rpmdevtools rpmlint 'dnf-command(builddep)'
+          gnupg2 perl perl-ExtUtils-MakeMaker systemd glibc-langpack-en
+
+      - uses: actions/checkout@v4
+
+      - name: Check that the tag matches the version in genfw and genfw.spec
+        id: version
+        run: |
+          tag='${{ github.ref_name }}'
+          version="${tag#v}"; version="${version%%-*}"
+          prerelease=false; [ "$version" != "${tag#v}" ] && prerelease=true
+          script_version=$(perl -ne 'print $1 if /^our \$VERSION\s*=\s*"([^"]+)"/' genfw)
+          spec_version=$(awk '/^Version:/ {print $2}' genfw.spec)
+          echo "tag=$tag version=$version genfw=$script_version spec=$spec_version prerelease=$prerelease"
+          [ "$version" = "$script_version" ] || { echo "::error::tag $tag does not match \$VERSION $script_version in genfw"; exit 1; }
+          [ "$version" = "$spec_version" ]   || { echo "::error::tag $tag does not match Version $spec_version in genfw.spec"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Require a signing key for a real release
+        if: steps.version.outputs.prerelease == 'false' && env.GPG_PRIVATE_KEY == ''
+        run: |
+          echo "::error::GPG_PRIVATE_KEY is not set in the release environment; a non-prerelease tag must be signed"
+          exit 1
+
+      - name: Install BuildRequires from the spec
+        run: dnf builddep -y genfw.spec
+
+      # One noarch RPM for every supported platform: no dist tag, and gzip
+      # payloads because EL7's rpm cannot read Fedora's default zstd.
+      - name: Configure rpmbuild for portable output
+        run: |
+          cat > ~/.rpmmacros <<'EOM'
+          %dist %{nil}
+          %_binary_payload w9.gzdio
+          %_source_payload w9.gzdio
+          %_gpg_digest_algo sha256
+          EOM
+
+      - name: Build tarball, source RPM, and binary RPM
+        run: |
+          make dist
+          rpmdev-setuptree
+          rpmbuild -ta genfw-*.tar.gz
+          mkdir -p dist
+          cp genfw-*.tar.gz genfw-*.src.rpm ~/rpmbuild/RPMS/noarch/genfw-*.noarch.rpm dist/
+          ls -l dist
+
+      - name: rpmlint
+        run: rpmlint -r genfw.rpmlintrc dist/*.rpm
+
+      - name: Import the signing key
+        if: env.GPG_PRIVATE_KEY != ''
+        run: |
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          echo "allow-preset-passphrase" > ~/.gnupg/gpg-agent.conf
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          fpr=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')
+          [ -n "$fpr" ] || { echo "::error::no secret key imported"; exit 1; }
+          echo "GPG_FPR=$fpr" >> "$GITHUB_ENV"
+          echo "%_gpg_name $fpr" >> ~/.rpmmacros
+          gpg-connect-agent /bye
+          for grip in $(gpg --list-secret-keys --with-colons --with-keygrip | awk -F: '/^grp/ {print $10}'); do
+            /usr/libexec/gpg-preset-passphrase --preset --passphrase "$GPG_PASSPHRASE" "$grip"
+          done
+          # The public key ships as a release asset; it is not kept in the
+          # repository, so rotating the key only means replacing the secrets.
+          gpg --armor --export "$fpr" > dist/RPM-GPG-KEY-genfw
+          gpg --show-keys dist/RPM-GPG-KEY-genfw
+
+      - name: Sign the RPMs and the tarball
+        if: env.GPG_PRIVATE_KEY != ''
+        run: |
+          rpmsign --addsign dist/*.rpm
+          rpm --import dist/RPM-GPG-KEY-genfw
+          rpm -K dist/*.rpm
+          gpg --batch --yes --armor --detach-sign dist/genfw-*.tar.gz
+
+      - name: Checksums
+        working-directory: dist
+        run: |
+          sha256sum genfw-* > SHA256SUMS
+          if [ -n "$GPG_PRIVATE_KEY" ]; then gpg --batch --yes --armor --detach-sign SHA256SUMS; fi
+          cat SHA256SUMS
+
+      - name: Note unsigned prerelease
+        if: env.GPG_PRIVATE_KEY == ''
+        run: echo "::warning::No signing key in the release environment; this prerelease's assets are unsigned"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  # Install the exact artifacts that will be published, on every supported
+  # platform, verifying the signature where a key is present.
+  verify:
+    name: Verify install (${{ matrix.name }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: EL7
+            image: quay.io/centos/centos:7
+            setup: |
+              sed -i -e 's|^mirrorlist=|#mirrorlist=|g' -e 's|^#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*.repo
+              yum install -y -q iptables
+              install() { yum localinstall -y -q "$@"; }
+          - name: EL9
+            image: almalinux:9
+            setup: |
+              dnf install -y -q --setopt=install_weak_deps=False iptables-nft
+              install() { dnf install -y -q --setopt=install_weak_deps=False "$@"; }
+          - name: Fedora
+            image: fedora:latest
+            setup: |
+              dnf install -y -q --setopt=install_weak_deps=False iptables-nft
+              install() { dnf install -y -q --setopt=install_weak_deps=False "$@"; }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      # Run via docker rather than a job container so EL7 works too (its
+      # glibc is too old for the Actions Node runtime).
+      - name: Install and run the built RPM
+        run: |
+          cat > /tmp/verify.sh <<'EOS'
+          set -e
+          ${{ matrix.setup }}
+          rpm --version
+          if [ -f /dist/RPM-GPG-KEY-genfw ]; then
+            rpm --import /dist/RPM-GPG-KEY-genfw
+            rpm -K /dist/genfw-*.noarch.rpm
+            rpm -K /dist/genfw-*.src.rpm
+          else
+            echo "no signing key in artifacts; skipping signature check"
+          fi
+          install /dist/genfw-*.noarch.rpm
+          rpm -qi genfw | grep -E '^(Version|Release|Signature)'
+          cd /src/t/sample
+          rules=$(/usr/sbin/genfw -d 2>/dev/null | grep -c '^-A')
+          echo "generated $rules rules with the installed genfw"
+          test "$rules" -gt 50
+          EOS
+          docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD:/src:ro" -v /tmp/verify.sh:/verify.sh:ro \
+            ${{ matrix.image }} bash /verify.sh
+
+  release:
+    name: Publish release
+    needs: [build, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: List assets
+        run: ls -l dist
+
+      # Keyless provenance: proves these files were built by this workflow
+      # at this commit. Verify with: gh attestation verify <file> --owner silug
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/genfw-*.tar.gz
+            dist/genfw-*.rpm
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          prerelease: ${{ needs.build.outputs.prerelease == 'true' }}
+          make_latest: ${{ needs.build.outputs.prerelease == 'false' }}

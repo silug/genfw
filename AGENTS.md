@@ -115,11 +115,26 @@ outstanding.
 ## Release procedure
 
 `$VERSION` in `genfw` and `Version:` in `genfw.spec` must match;
-`t/00-compile.t` enforces it. A release bump edits both and adds a
-`%changelog` entry in the same form as the existing ones, then `make dist` /
-`make sign`. The license identifier in the spec and the script header must
-agree. `genfw.rpmlintrc` exists to silence one false positive; don't add
-filters to hide real findings.
+`t/00-compile.t` enforces it, and the release workflow refuses a tag that
+does not match both. A release is:
+
+1. A PR that bumps both versions and adds a `%changelog` entry in the same
+   form as the existing ones.
+2. After it merges, a signed tag `v<version>` on master, pushed. Creating
+   the release in the GitHub UI instead also works; it creates the tag.
+3. Approving the `release` environment when the workflow asks.
+
+`.github/workflows/release.yml` then builds one portable noarch RPM (no
+dist tag, gzip payload so EL7's rpm can read it), GPG-signs the RPMs and
+tarball with the key from the `release` environment, installs the result on
+EL7, EL9, and Fedora, attests provenance, and publishes the assets. A tag
+with a suffix (`v1.51-rc1`) is a prerelease and may run without the signing
+key; a real release requires it. Nothing in that workflow can be tested
+without pushing a tag, so use a `-rc` tag to rehearse.
+
+The license identifier in the spec and the script header must agree.
+`genfw.rpmlintrc` exists to silence one false positive; don't add filters
+to hide real findings.
 
 ## How the script works
 
