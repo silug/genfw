@@ -39,6 +39,9 @@ sub filter_to;
 sub generate_rules;
 sub parserules;
 sub parseconfig;
+sub ifcfg_addresses;
+sub ip_addresses;
+sub prefix_to_netmask;
 sub debug;
 sub bold;
 sub generate_rules;
@@ -135,6 +138,17 @@ for my $rules ("$config_dir/rules",
 
 die "No rules found!  Exiting...\n" if (!$rules_found);
 
+# Where interface addresses come from: "ifcfg" reads the Red Hat
+# network-scripts files, "ip" asks the running kernel through ip(8). The
+# rules file can choose with an "addresses" line; otherwise use ifcfg when
+# any ifcfg-* file exists and ip when none do.
+my $source=$conf{'addresses'};
+if (!defined($source)) {
+    my @ifcfg=glob("$sysconfig_dir/network-scripts/ifcfg-*");
+    $source=@ifcfg ? "ifcfg" : "ip";
+    debug "Interface addresses from '$source' (auto-detected).";
+}
+
 for my $name (keys(%interface)) {
     if (exists($interface{$name}->{'flags'}->{'ignore'})) {
         debug "Skipping interface $name";
@@ -142,27 +156,18 @@ for my $name (keys(%interface)) {
         next;
     }
 
-    my $dir=new DirHandle "$sysconfig_dir/network-scripts"
-        or die "Failed to open $config_dir/network-scripts: $!\n";
-    my @configs=("$sysconfig_dir/network-scripts/ifcfg-$name");
-    for my $file (grep(/^ifcfg-$name:\d+$/, $dir->read)) {
-        push(@configs, "$sysconfig_dir/network-scripts/$file");
-    }
-    for my $configfile (@configs) {
-        debug "configfile: $configfile";
+    push(@{$interface{$name}->{'cfg'}},
+         $source eq "ifcfg" ? ifcfg_addresses($name) : ip_addresses($name));
 
-        my %cfg=parseconfig($configfile, $name);
-        next if (!%cfg);
-
-        push(@{$interface{$name}->{'cfg'}}, \%cfg);
-        for my $cfg (@{$interface{$name}->{'cfg'}}) {
-            debug "interface $name";
-            if (defined($cfg->{'ipaddr'})) {
-                debug "  address " . $cfg->{'ipaddr'};
-                debug "  netmask " . $cfg->{'netmask'};
-                debug "  network " . $cfg->{'network'};
-                debug "  broadcast " . $cfg->{'broadcast'};
-            }
+    for my $cfg (@{$interface{$name}->{'cfg'}}) {
+        debug "interface $name";
+        if (defined($cfg->{'ipaddr'})) {
+            debug "  address " . $cfg->{'ipaddr'};
+            debug "  netmask " . $cfg->{'netmask'};
+            debug "  network " . $cfg->{'network'};
+            debug "  broadcast " . $cfg->{'broadcast'};
+        } else {
+            debug "  dynamically configured";
         }
     }
     debug;
@@ -804,6 +809,13 @@ sub parserules {
                                     : "$config_dir/$parts[1]")) {
                 parserules($rule_file) if (-e $rule_file);
             }
+        } elsif ($parts[0] eq "addresses" and defined($parts[1])) {
+            if ($parts[1]=~/^(ifcfg|ip)$/) {
+                $conf{'addresses'}=$1;
+            } else {
+                warn "Unknown address source '$parts[1]' (line $.); "
+                   . "expected 'ifcfg' or 'ip'.\n";
+            }
         } elsif ($parts[0] eq "policy" and scalar(@parts) == 3) {
             $parts[1]=~s/^filter://;
             warn "Bad $parts[1] policy target '$parts[2]'\n"
@@ -815,6 +827,93 @@ sub parserules {
         }
         debug;
     }
+}
+
+# Addresses for interface $name from network-scripts/ifcfg-$name and any
+# ifcfg-$name:N aliases. Returns a list of config hashes (see parseconfig).
+sub ifcfg_addresses {
+    my ($name)=@_;
+
+    my $dir=new DirHandle "$sysconfig_dir/network-scripts"
+        or die "Failed to open $sysconfig_dir/network-scripts: $!\n";
+    my @configs=("$sysconfig_dir/network-scripts/ifcfg-$name");
+    for my $file (grep(/^ifcfg-\Q$name\E:\d+$/, $dir->read)) {
+        push(@configs, "$sysconfig_dir/network-scripts/$file");
+    }
+
+    my @cfgs;
+    for my $configfile (@configs) {
+        debug "configfile: $configfile";
+        my %cfg=parseconfig($configfile, $name);
+        push(@cfgs, \%cfg) if (%cfg);
+    }
+    return @cfgs;
+}
+
+# Addresses for interface $name from the running system, via
+# "ip -o -4 addr show dev $name". The one-line format is the same on every
+# iproute2 version genfw runs on (EL7's predates JSON output) and needs no
+# modules to parse. Each address becomes one config hash, like one ifcfg
+# file. An address flagged "dynamic" (assigned by DHCP) is treated like
+# BOOTPROTO=dhcp: the interface is known, but its address is not relied on,
+# since it can change while the generated rules stay in place.
+sub ip_addresses {
+    my ($name)=@_;
+
+    my $pid=open(my $fh, '-|');
+    die "Can't fork to run ip: $!\n" unless (defined($pid));
+    if (!$pid) {
+        open(STDERR, '>', '/dev/null');
+        exec('ip', '-o', '-4', 'addr', 'show', 'dev', $name) or exit(127);
+    }
+    my @lines=<$fh>;
+    close($fh);
+    my $status=$? >> 8;
+
+    if ($status == 127) {
+        warn "The ip command was not found; can't determine addresses "
+           . "for interface $name.\n";
+        return;
+    }
+    if ($status != 0) {
+        debug "ip found no device $name (exit $status)";
+        return;
+    }
+
+    my @cfgs;
+    for my $line (@lines) {
+        chomp($line);
+        my ($ipaddr, $prefix, $brd, $rest)=
+            $line=~/^\d+:\s+\S+\s+inet\s+(\d+\.\d+\.\d+\.\d+)\/(\d+)
+                     (?:\s+brd\s+(\S+))?\s*(.*)$/x;
+        if (!defined($ipaddr)) {
+            debug "Skipping unexpected ip output for $name: $line";
+            next;
+        }
+        debug "ip: $name $ipaddr/$prefix" . (defined($brd) ? " brd $brd" : "");
+
+        if ($rest=~/\bdynamic\b/) {
+            debug "  dynamic address; not relying on it";
+            push(@cfgs, {'bootproto' => 'dhcp'});
+            next;
+        }
+
+        my $netmask=prefix_to_netmask($prefix);
+        my $network=inet_ntoa(inet_aton($ipaddr) & inet_aton($netmask));
+        my $broadcast=defined($brd) ? $brd
+                    : inet_ntoa(inet_aton($ipaddr) | ~inet_aton($netmask));
+        push(@cfgs, {'ipaddr' => $ipaddr, 'netmask' => $netmask,
+                     'network' => $network, 'broadcast' => $broadcast,
+                     'bootproto' => 'static'});
+    }
+    return @cfgs;
+}
+
+sub prefix_to_netmask {
+    my ($prefix)=@_;
+
+    my $bits=$prefix == 0 ? 0 : ((0xFFFFFFFF << (32 - $prefix)) & 0xFFFFFFFF);
+    return inet_ntoa(pack('N', $bits));
 }
 
 sub parseconfig {
@@ -1195,6 +1294,20 @@ Modifies generated rules so that all dropped packets are logged.
 
 Includes rules from I<file>, which may be a glob.
 
+=item C<addresses> C<ifcfg>|C<ip>
+
+Where to learn each interface's addresses. C<ifcfg> reads the Red Hat
+F<network-scripts/ifcfg-*> files, including C<ifcfg-eth0:1> style aliases.
+C<ip> asks the running system with C<ip -o -4 addr show>, which works on any
+Linux distribution but requires the interfaces to be configured when genfw
+runs; an address that C<ip> reports as C<dynamic> (assigned by DHCP) is
+treated the same as C<BOOTPROTO=dhcp>. The default is C<ifcfg> when any
+F<ifcfg-*> file exists and C<ip> otherwise.
+
+When relying on C<ip>, make sure genfw runs after the network is up, for
+example by ordering the systemd unit after C<network-online.target>, or by
+re-running C<genfw -i> from a network dispatcher hook.
+
 =back
 
 =head2 Flags
@@ -1270,7 +1383,8 @@ F</etc/sysconfig/genfw/rules>   The rules used to generate the firewall.
 
 F</etc/sysconfig/genfw/rules.d/*.rules>   Additional rules used to generate the firewall.
 
-F</etc/sysconfig/network-scripts/ifcfg-*> The network configuration.
+F</etc/sysconfig/network-scripts/ifcfg-*> The network configuration, when
+using the C<ifcfg> address source.
 
 =head1 NOTES
 
@@ -1279,8 +1393,10 @@ possible.  This script tends to encourage this behavior...
 
 =head1 BUGS
 
-Currently this script only knows how to read the configuration from a Red
-Hat system.
+Only IPv4 is supported.
+
+The C<ifcfg> address source only understands Red Hat style
+F<network-scripts>; on other systems use the C<ip> source.
 
 =head1 AUTHOR
 

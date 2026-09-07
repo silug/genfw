@@ -5,8 +5,8 @@ Guidance for AI coding agents working in this repository.
 ## What this is
 
 `genfw` is a single-file Perl script (no modules) that generates an iptables
-firewall from a small text `rules` file plus the host's Red Hat-style
-`ifcfg-*` network configuration. The user documentation is the POD at the
+firewall from a small text `rules` file plus the host's interface addresses,
+read from Red Hat-style `ifcfg-*` files or from `ip -o -4 addr show`. The user documentation is the POD at the
 bottom of `genfw` (`perldoc ./genfw`); it covers every rules directive and
 interface flag and is the source for the man page.
 
@@ -142,11 +142,21 @@ to hide real findings.
 
 Read the top of `genfw` first: the option handling, the `%conf` defaults
 block (policies, the three built-in chains and their comments), and the main
-loop that calls `parserules`, `parseconfig`, and `generate_rules` in that
-order. Two globals carry all state: `%interface` (per interface: type, flags,
-and a list of parsed `ifcfg` configs, a list because aliases like `eth0:1`
-merge in) and `%conf` (logging fragment, policies, user chains, and the
-`append`/`insert` rule lists keyed by `[table:]chain`).
+loop that calls `parserules`, then one address source per interface, then
+`generate_rules`. Two globals carry all state: `%interface` (per interface:
+type, flags, and a list of address configs, a list because an interface can
+have several addresses) and `%conf` (logging fragment, policies, user
+chains, and the `append`/`insert` rule lists keyed by `[table:]chain`).
+
+Address sources: `ifcfg_addresses` reads `ifcfg-*` files through
+`parseconfig`; `ip_addresses` parses `ip -o -4 addr show dev NAME`. Both
+return the same hash shape, and a DHCP address (`BOOTPROTO=dhcp` or ip's
+`dynamic` flag) becomes a config with no `ipaddr`. The `addresses`
+directive picks one; otherwise `ifcfg` is used when any `ifcfg-*` file
+exists, else `ip`. `t/10-addresses.t` pins that the same network described
+either way gives identical rules. The `ip` text format was chosen over
+`-json` because EL7's iproute predates JSON output and JSON::PP is another
+split-out module; tests use a fake `ip` on PATH.
 
 Non-obvious design points, each visible in `generate_rules`:
 
@@ -177,5 +187,7 @@ Non-obvious design points, each visible in `generate_rules`:
 ## Known gaps
 
 `TODO` is the authoritative wishlist; `grep -n FIXME genfw` marks the code
-sites. Beyond both: the script reads `ifcfg-*` files, which RHEL 9 and
-current Fedora no longer create by default, and it has no IPv6 support.
+sites. Beyond both: no IPv6 support, and with the `ip` address source the
+shipped systemd unit is not ordered after the network comes up, so
+addresses may be unknown at boot; that needs unit ordering or a dispatcher
+hook, which is documented in the POD but not shipped.
