@@ -133,14 +133,20 @@ RULES
     );
 }
 
-# --- Explicit "filter:" prefix. Documented as accepted; currently ignored
-#     because parserules strips the prefix from the wrong field.
+# --- Explicit "filter:" prefix is equivalent to no prefix.
 {
-    my $res = run_rules("append filter:INPUT -p tcp --dport 8022 -j ACCEPT\n");
-    TODO: {
-        local $TODO = 'parserules applies s/^filter:// to $parts[0] instead of $parts[1]';
-        ok((grep { /--dport 8022/ } rules_in($res, 'INPUT')), 'append filter:INPUT is honored');
-    }
+    my $res = run_rules(<<'RULES');
+append filter:INPUT -p tcp --dport 8022 -j ACCEPT
+insert filter:INPUT -p tcp --dport 8023 -j ACCEPT
+append INPUT -p tcp --dport 8024 -j ACCEPT
+RULES
+    my @input = rules_in($res, 'INPUT');
+    ok((grep { /--dport 8022/ } @input), 'append filter:INPUT is honored');
+    is($input[0], '-p tcp --dport 8023 -j ACCEPT', 'insert filter:INPUT lands first like insert INPUT');
+    my ($a) = grep { $input[$_] =~ /--dport 8022/ } 0 .. $#input;
+    my ($b) = grep { $input[$_] =~ /--dport 8024/ } 0 .. $#input;
+    ok($a < $b, 'filter:INPUT and INPUT appends share one ordered list');
+    ok(!(grep { /-t filter / } @{$res->{rules}}), 'no rule is emitted with an explicit -t filter');
 }
 
 # --- Arguments with shell metacharacters are single-quoted in script output.
