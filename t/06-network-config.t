@@ -109,7 +109,7 @@ my %ifcfg = (
         [sort 'inside', 'world', 'inside-world', 'world-inside'],
         'labels replace interface names in chain names',
     );
-    ok((grep { /--log-prefix 'inside -> world: '/ } rules_in($res, 'inside-world')), 'labels used in log prefixes');
+    ok((grep { /--log-prefix "inside -> world: "/ } rules_in($res, 'inside-world')), 'labels used in log prefixes');
     ok((grep { $_ eq '-i eth1 -j inside' } rules_in($res, 'FORWARD')), 'real interface name still used for -i');
     ok((grep { $_ eq '-o eth0 -j inside-world' } rules_in($res, 'inside')), 'real interface name still used for -o');
 }

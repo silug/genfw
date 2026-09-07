@@ -1,6 +1,6 @@
 #!/usr/bin/perl
-# "-i" mode runs iptables directly instead of printing a script. A fake
-# iptables on PATH records what would have been executed.
+# "-i" mode loads the ruleset with iptables-restore instead of printing it.
+# A fake iptables-restore on PATH records what it would have loaded.
 use strict;
 use warnings;
 use lib 't/lib';
@@ -21,8 +21,10 @@ my %stable = (PERL_HASH_SEED => 0, PERL_PERTURB_KEYS => 0);
 # Script mode output, for comparison.
 my $script = run_genfw(make_fixture(rules => $rules, ifcfg => \%ifcfg), env => { %stable });
 
+# -i feeds the ruleset to iptables-restore on stdin, and it is exactly the
+# text that script mode prints.
 {
-    my ($bindir, $log) = fake_iptables();
+    my ($bindir, $log) = fake_iptables_restore();
     my $res = run_genfw(
         make_fixture(rules => $rules, ifcfg => \%ifcfg),
         opts => ['-i', '-d'],
@@ -30,75 +32,38 @@ my $script = run_genfw(make_fixture(rules => $rules, ifcfg => \%ifcfg), env => {
     );
     is($res->{status}, 0, '-i exits 0');
     is($res->{stdout}, '', '-i prints nothing to stdout');
-
-    my @ran = grep { length } split /\n/, read_file($log);
-    ok(@ran > 0, 'fake iptables was invoked');
-
-    # Every command from script mode should have been executed, in order.
-    # Script mode shell-quotes arguments; -i passes them as argv, so strip
-    # quoting for the comparison.
-    my @expected = map { my $s = $_; $s =~ s/^iptables //; $s =~ s/'//g; $s } @{$script->{rules}};
-    is_deeply(\@ran, \@expected, '-i executes the same commands as script mode emits');
-
-    # Arguments containing spaces (generated log prefixes) must reach
-    # iptables as a single argv element, not be re-split by a shell.
-    my $argv = read_file("$log.argv");
-    like($argv, qr/\[--log-prefix\]\[INPUT fall-through: \]/, 'log prefix with spaces is one argv element');
-    like($argv, qr/\[--state\]\[ESTABLISHED,RELATED\]/, 'comma-separated state list is one argv element');
+    ok(length(read_file($log)), 'fake iptables-restore received input');
+    is(read_file($log), $script->{stdout}, '-i sends iptables-restore exactly what script mode prints');
 }
 
-# The script-mode output, when actually executed by sh, must hand iptables
-# exactly the argv that -i mode passes directly. This is where quoting bugs
-# in script mode show up.
+# An iptables-restore failure means the firewall was not (fully) loaded, so
+# it is fatal rather than a warning.
 {
-    my $tricky = "int eth1 nat\nout eth0\n"
-               . "append INPUT -m comment --comment it's -j ACCEPT\n"
-               . "append INPUT -m string --string 'quoted' -j DROP\n"
-               . "append INPUT -m comment --comment back\\slash -j ACCEPT\n";
-
-    my ($bindir_i, $log_i) = fake_iptables();
-    run_genfw(
-        make_fixture(rules => $tricky, ifcfg => \%ifcfg),
-        opts => ['-i', '-d'],
-        env  => { %stable, PATH => "$bindir_i:$ENV{PATH}" },
-    );
-
-    my $dir = make_fixture(rules => $tricky, ifcfg => \%ifcfg);
-    my $script = run_genfw($dir, env => { %stable });
-    open my $fh, '>', "$dir/firewall.sh" or die $!;
-    print $fh $script->{stdout};
-    close $fh;
-
-    my ($bindir_s, $log_s) = fake_iptables();
-    my $sh_out = qx(PATH='$bindir_s:$ENV{PATH}' sh -e '$dir/firewall.sh' 2>&1);
-    is($? >> 8, 0, 'generated script runs under sh -e without error') or diag($sh_out);
-
-    is(read_file("$log_s.argv"), read_file("$log_i.argv"),
-        'sh executing the generated script yields the same argv as -i mode');
-    like(read_file("$log_s.argv"), qr/\[--comment\]\[it's\]/, "embedded ' survives the round trip through sh");
-    like(read_file("$log_s.argv"), qr/\[--string\]\['quoted'\]/, 'surrounding quotes from the rules file survive as literals');
-    like(read_file("$log_s.argv"), qr/\[--comment\]\[back\\slash\]/, 'backslash survives the round trip through sh');
-}
-
-# iptables failures are warnings, not fatal.
-{
-    my ($bindir, $log) = fake_iptables();
+    my ($bindir, $log) = fake_iptables_restore();
     my $res = run_genfw(
         make_fixture(rules => $rules, ifcfg => \%ifcfg),
         opts => ['-i', '-d'],
-        env  => { PATH => "$bindir:$ENV{PATH}", GENFW_FAKE_EXIT => 3 },
+        env  => { %stable, PATH => "$bindir:$ENV{PATH}", GENFW_FAKE_EXIT => 3 },
     );
-    is($res->{status}, 0, 'iptables failures do not abort genfw');
-    my @failed = grep { /failed with exit value 3/ } @{$res->{warnings}};
-    my @ran = grep { length } split /\n/, read_file($log);
-    is(scalar @failed, scalar @ran, 'every failed iptables call produces a warning');
+    isnt($res->{status}, 0, 'iptables-restore failure makes genfw exit non-zero');
+    ok((grep { /'iptables-restore' failed with exit value 3/ } @{$res->{warnings}}), 'failure message names the loader and its exit value');
+    ok(length(read_file($log)), 'the ruleset was still sent in full before the failure was reported');
+}
+
+# The header identifies the format and how to load it.
+{
+    like($script->{stdout}, qr/\A# Generated by genfw \d/, 'header names genfw and the version');
+    like($script->{stdout}, qr/^# Load with: iptables-restore/m, 'header says how to load the file');
+    like($script->{stdout}, qr/^\*filter$/m, 'has a filter table block');
+    like($script->{stdout}, qr/^COMMIT$/m, 'has a COMMIT line');
+    is(($script->{stdout} =~ tr/\n//), scalar(split /\n/, $script->{stdout}), 'every line is newline-terminated');
 }
 
 # Script mode without -d reads from /etc/sysconfig; we can't test that
 # directly, but -d alone must not require -i.
 {
     my $res = run_genfw(make_fixture(rules => $rules, ifcfg => \%ifcfg), opts => ['-d']);
-    like($res->{stdout}, qr/^#!\/bin\/sh/, 'script mode emits a shell script');
+    like($res->{stdout}, qr/^\*filter$/m, 'script mode emits an iptables-restore file');
     like($res->{stdout}, qr/^# /m, 'script mode includes comments');
 }
 

@@ -45,7 +45,7 @@ jobs:
             install: >-
               sudo apt-get update -q &&
               sudo apt-get install -y -q --no-install-recommends
-              make perl libtest-pod-perl netbase
+              make perl libtest-pod-perl netbase iptables
     steps:
       - name: Install dependencies
         run: ${{ matrix.install }}
@@ -69,16 +69,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run the suite in a CentOS 7 container
+      # NET_ADMIN lets the container load the generated ruleset with EL7's
+      # legacy iptables-restore (1.4.21), the oldest loader genfw targets.
+      - name: Run the suite in a CentOS 7 container, then load the sample ruleset
         run: |
-          docker run --rm -v "$PWD:/src:ro" quay.io/centos/centos:7 bash -e -c '
+          docker run --rm --cap-add NET_ADMIN --cap-add NET_RAW -v "$PWD:/src:ro" quay.io/centos/centos:7 bash -e -c '
             sed -i -e "s|^mirrorlist=|#mirrorlist=|g" \
                    -e "s|^#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g" \
                    /etc/yum.repos.d/CentOS-*.repo
-            yum install -y -q perl perl-Test-Simple perl-Test-Harness perl-ExtUtils-MakeMaker make
+            yum install -y -q perl perl-Test-Simple perl-Test-Harness perl-ExtUtils-MakeMaker make iptables
             cp -r /src /work && cd /work
             perl -v | sed -n 2p
             make test
+            iptables-restore --version
+            cd t/sample
+            perl ../../genfw -d 2>/dev/null > /tmp/sample.rules
+            iptables-restore < /tmp/sample.rules
+            echo "rules generated: $(grep -c "^-A" /tmp/sample.rules), loaded: $(iptables-save | grep -c "^-A")"
+            test "$(grep -c "^-A" /tmp/sample.rules)" -eq "$(iptables-save | grep -c "^-A")"
           '
 
   lint:
@@ -104,15 +112,6 @@ jobs:
           shellcheck --severity=warning install.sh
           shellcheck --severity=warning --shell=bash firewall.init
 
-      # genfw's script-mode output is itself a shell script; make sure it is
-      # a well-formed one.
-      - name: shellcheck generated firewall script
-        working-directory: t/sample
-        run: |
-          perl ../../genfw -d 2>/dev/null > firewall.sh
-          wc -l firewall.sh
-          shellcheck firewall.sh
-
       # rpmlint picks up genfw.rpmlintrc automatically. Its spelling filter
       # only matches built packages, so tell rpmlint not to fail on the
       # filter being unused for a bare spec.
@@ -122,7 +121,10 @@ jobs:
   rpm:
     name: RPM build and install (Fedora)
     runs-on: ubuntu-latest
-    container: fedora:latest
+    # NET_ADMIN so the installed genfw can load a ruleset with -i for real.
+    container:
+      image: fedora:latest
+      options: --cap-add=NET_ADMIN --cap-add=NET_RAW
     steps:
       - name: Install build tools
         run: >-
@@ -170,7 +172,17 @@ jobs:
           test -f /usr/share/man/man8/genfw.8.gz
           man -w genfw
           systemd-analyze verify /usr/lib/systemd/system/genfw.service
-          cd t/sample && /usr/sbin/genfw -d 2>/dev/null | grep -c '^iptables '
+          iptables-restore --version
+
+      # The real thing: the installed genfw generates and loads the sample
+      # ruleset with -i, and iptables-save reports every rule.
+      - name: Load the sample ruleset with genfw -i
+        working-directory: t/sample
+        run: |
+          /usr/sbin/genfw -d 2>/dev/null > /tmp/sample.rules
+          /usr/sbin/genfw -d -i
+          echo "rules generated: $(grep -c '^-A' /tmp/sample.rules), loaded: $(iptables-save | grep -c '^-A')"
+          test "$(grep -c '^-A' /tmp/sample.rules)" -eq "$(iptables-save | grep -c '^-A')"
 
       - uses: actions/upload-artifact@v4
         with:

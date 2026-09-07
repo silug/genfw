@@ -5,7 +5,7 @@ package GenfwTest;
 # genfw has no module structure, so tests drive it as a black box: build a
 # throwaway config tree, run "genfw -d" with that tree as the current
 # directory (debug mode reads config from "."), and inspect the generated
-# iptables commands on stdout and the warnings on stderr.
+# iptables-restore ruleset on stdout and the warnings on stderr.
 #
 # Only modules that ship with the base Fedora perl package are used here.
 #
@@ -25,7 +25,8 @@ our @EXPORT = qw(
     run_genfw
     rules_in
     chains_created
-    fake_iptables
+    policy_of
+    fake_iptables_restore
     read_file
 );
 
@@ -87,10 +88,15 @@ sub make_fixture {
 # run_genfw($dir, opts => [...], env => {...})
 #
 # Runs genfw in $dir. Returns a hashref:
-#   stdout   - full stdout
+#   stdout   - full stdout (an iptables-restore file)
 #   stderr   - full stderr
 #   status   - exit status (0 on success)
-#   rules    - arrayref of "iptables ..." lines from stdout, in order
+#   rules    - arrayref of every "-A chain args" line, all tables, in order
+#   tables   - hashref: table name => {
+#                chains    => [user chains declared, in order],
+#                policy    => { builtin chain => target },
+#                rules     => [ [chain, args], ... ] in order,
+#                committed => 1 if the table block ended with COMMIT }
 #   warnings - arrayref of stderr lines that are not debug tracing
 sub run_genfw {
     my ($dir, %args) = @_;
@@ -106,14 +112,36 @@ sub run_genfw {
     my $status = $? >> 8;
     my $stderr = read_file($errfile);
 
-    my @rules = grep { /^iptables / } split /\n/, $stdout;
     my @warnings = grep { length && !/^d: / } split /\n/, $stderr;
+
+    my (%tables, @rules, $table);
+    for my $line (split /\n/, $stdout) {
+        if ($line =~ /^\*(\w+)$/) {
+            $table = $1;
+            $tables{$table} = { chains => [], policy => {}, rules => [], committed => 0 };
+        } elsif (!defined $table) {
+            next;
+        } elsif ($line =~ /^:(\S+) (\S+) \[\d+:\d+\]$/) {
+            if ($2 eq '-') {
+                push @{ $tables{$table}{chains} }, $1;
+            } else {
+                $tables{$table}{policy}{$1} = $2;
+            }
+        } elsif ($line =~ /^-A (\S+) (.*)$/) {
+            push @{ $tables{$table}{rules} }, [$1, $2];
+            push @rules, $line;
+        } elsif ($line eq 'COMMIT') {
+            $tables{$table}{committed} = 1;
+            $table = undef;
+        }
+    }
 
     return {
         stdout   => $stdout,
         stderr   => $stderr,
         status   => $status,
         rules    => \@rules,
+        tables   => \%tables,
         warnings => \@warnings,
     };
 }
@@ -121,53 +149,45 @@ sub run_genfw {
 # rules_in($result, $chain [, $table])
 #
 # Returns the argument strings of every "-A $chain" rule in the given table
-# (default "filter"), in emission order, with the leading
-# "iptables [-t table] -A chain " stripped.
+# (default "filter"), in emission order, with "-A chain " stripped.
 sub rules_in {
     my ($res, $chain, $table) = @_;
     $table ||= 'filter';
-    my @found;
-    for my $line (@{ $res->{rules} }) {
-        my ($t, $c, $rest) = $line =~ /^iptables (?:-t (\S+) )?-A (\S+) (.*)$/
-            or next;
-        $t ||= 'filter';
-        push @found, $rest if $t eq $table && $c eq $chain;
-    }
-    return @found;
+    my $t = $res->{tables}{$table} or return;
+    return map { $_->[1] } grep { $_->[0] eq $chain } @{ $t->{rules} };
 }
 
-# chains_created($result [, $table]) -> list of chains passed to -N
+# chains_created($result [, $table]) -> user chains declared, in order
 sub chains_created {
     my ($res, $table) = @_;
     $table ||= 'filter';
-    my @found;
-    for my $line (@{ $res->{rules} }) {
-        my ($t, $c) = $line =~ /^iptables (?:-t (\S+) )?-N (\S+)$/ or next;
-        $t ||= 'filter';
-        push @found, $c if $t eq $table;
-    }
-    return @found;
+    my $t = $res->{tables}{$table} or return;
+    return @{ $t->{chains} };
 }
 
-# fake_iptables() -> ($bindir, $logfile)
+# policy_of($result, $chain [, $table]) -> policy target, or undef if unset
+sub policy_of {
+    my ($res, $chain, $table) = @_;
+    $table ||= 'filter';
+    my $t = $res->{tables}{$table} or return;
+    return $t->{policy}{$chain};
+}
+
+# fake_iptables_restore() -> ($bindir, $logfile)
 #
-# Creates a directory containing a fake "iptables" that records its
-# arguments, one invocation per line, to $logfile ("$*" form) and to
-# "$logfile.argv" with each argument bracketed ("[-A][INPUT][-j][ACCEPT]")
-# so argv boundaries can be checked. Prepend $bindir to PATH to exercise
-# "genfw -i" without touching the real firewall. Set GENFW_FAKE_EXIT in the
-# environment to make the fake exit non-zero.
-sub fake_iptables {
+# Creates a directory containing a fake "iptables-restore" that appends
+# everything it reads on stdin to $logfile. Prepend $bindir to PATH to
+# exercise "genfw -i" without touching the real firewall. Set
+# GENFW_FAKE_EXIT in the environment to make the fake exit non-zero.
+sub fake_iptables_restore {
     my $bindir = tempdir('genfw-fakebin-XXXXXX', TMPDIR => 1, CLEANUP => 1);
-    my $logfile = "$bindir/iptables.log";
-    write_file("$bindir/iptables", <<"EOS");
+    my $logfile = "$bindir/iptables-restore.log";
+    write_file("$bindir/iptables-restore", <<"EOS");
 #!/bin/sh
-printf '%s\\n' "\$*" >> '$logfile'
-for a in "\$@"; do printf '[%s]' "\$a"; done >> '$logfile.argv'
-printf '\\n' >> '$logfile.argv'
+cat >> '$logfile'
 exit \${GENFW_FAKE_EXIT:-0}
 EOS
-    chmod 0755, "$bindir/iptables";
+    chmod 0755, "$bindir/iptables-restore";
     return ($bindir, $logfile);
 }
 

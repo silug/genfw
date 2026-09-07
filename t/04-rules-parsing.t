@@ -36,7 +36,7 @@ for my $alias (qw(out output outside)) {
         ifcfg => { %ifcfg, eth2 => "DEVICE=eth2\nBOOTPROTO=dhcp\n" });
     is_deeply(
         [rules_in($res, 'eth0-eth2')],
-        ["-m limit -j LOG --log-prefix 'eth0 -> eth2: '", '-j DROP'],
+        ['-m limit -j LOG --log-prefix "eth0 -> eth2: "', '-j DROP'],
         'out -> out is log and drop only',
     );
 }
@@ -55,7 +55,7 @@ RULES
     is($res->{status}, 0, 'comments and continuation parse');
     is_deeply($res->{warnings}, [], 'no warnings for comments/continuation') or diag(join "\n", @{$res->{warnings}});
     ok((grep { /--dport 22 -j acceptnew/ } rules_in($res, 'eth1-eth0')), 'continued line contributes its flags');
-    ok((grep { /--comment 'escaped#hash'/ } rules_in($res, 'INPUT')), '\# yields a literal # in a rule argument');
+    ok((grep { /--comment "escaped#hash"/ } rules_in($res, 'INPUT')), '\# yields a literal # in a rule argument');
 }
 
 # --- Logging modes.
@@ -81,10 +81,11 @@ RULES
 # --- policy directive.
 {
     my $res = run_rules("int eth1\nout eth0\npolicy OUTPUT DROP\npolicy nat:PREROUTING ACCEPT\n");
-    ok((grep { $_ eq 'iptables -P OUTPUT DROP' } @{$res->{rules}}), 'policy overrides a filter chain');
-    ok((grep { $_ eq 'iptables -t nat -P PREROUTING ACCEPT' } @{$res->{rules}}), 'policy accepts table:chain');
-    is(scalar(grep { /-P PREROUTING/ } @{$res->{rules}}), 1, 'table:chain policy is emitted exactly once');
-    is((rules_in($res, 'OUTPUT'))[-1], "-m limit -j LOG --log-prefix 'OUTPUT fall-through: '",
+    is(policy_of($res, 'OUTPUT'), 'DROP', 'policy overrides a filter chain');
+    is(policy_of($res, 'PREROUTING', 'nat'), 'ACCEPT', 'policy accepts table:chain');
+    is(scalar(grep { /^:PREROUTING / } split /\n/, $res->{stdout}), 1, 'table:chain policy is emitted exactly once');
+    is(policy_of($res, 'PREROUTING', 'mangle'), undef, 'nat policy does not leak into mangle');
+    is((rules_in($res, 'OUTPUT'))[-1], '-m limit -j LOG --log-prefix "OUTPUT fall-through: "',
         'OUTPUT gains a fall-through log once its policy is DROP');
 }
 {
@@ -125,8 +126,9 @@ RULES
     is(scalar(grep { $_ eq 'mychain' } chains_created($res)), 1, 'chain filter:NAME creates NAME once');
     ok((grep { /Not re-declaring chain 'mychain'/ } @{$res->{warnings}}), 'chain filter:NAME and chain NAME are the same chain');
     is_deeply([rules_in($res, 'mychain')], ['-p tcp --dport 8080 -j ACCEPT'], 'append to a chain declared with filter: works');
-    is_deeply([grep { /-P OUTPUT/ } @{$res->{rules}}], ['iptables -P OUTPUT DROP'], 'policy filter:OUTPUT sets the filter OUTPUT policy exactly once');
-    is((rules_in($res, 'OUTPUT'))[-1], "-m limit -j LOG --log-prefix 'OUTPUT fall-through: '",
+    is(policy_of($res, 'OUTPUT'), 'DROP', 'policy filter:OUTPUT sets the filter OUTPUT policy');
+    is(scalar(grep { /^:OUTPUT / } split /\n/, $res->{stdout}), 1, 'filter OUTPUT policy is declared exactly once');
+    is((rules_in($res, 'OUTPUT'))[-1], '-m limit -j LOG --log-prefix "OUTPUT fall-through: "',
         'policy filter:OUTPUT DROP enables the fall-through log');
 }
 

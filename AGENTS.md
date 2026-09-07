@@ -54,10 +54,10 @@ cd t/sample && perl ../../genfw -d   # against the checked-in sample config
 
 `-d` (or `DEBUG` in the environment) points `$config_dir` at `.` instead of
 `/etc/sysconfig`; see the option handling at the top of `genfw` for exactly
-what is read. Without `-i`, genfw prints a `#!/bin/sh` script of `iptables`
-commands to stdout. With `-i` (what the systemd unit and init script use) it
-executes `iptables` directly and prints nothing. Never run `-i` casually: it
-flushes all tables first.
+what is read. Without `-i`, genfw prints an `iptables-restore` ruleset to
+stdout. With `-i` (what the systemd unit and init script use) it pipes that
+same text to `iptables-restore` and prints nothing. Never run `-i` casually:
+the ruleset lists every table, so loading it replaces the whole firewall.
 
 ## Git workflow
 
@@ -84,13 +84,18 @@ build a throwaway config tree, run `genfw -d` against it, inspect the emitted
 `t/lib/GenfwTest.pm`, each documented in a comment above it; read that file
 before writing a test. Each `t/*.t` opens with a comment saying what it
 covers (`head -3 t/*.t`). Nothing in the suite touches the real firewall or
-needs root; `-i` mode runs against a recording `iptables` stub.
+needs root; `-i` mode runs against a recording `iptables-restore` stub, and
+`t/09-apply.t` loads rulesets into a real `iptables-restore` inside an
+unprivileged network namespace (`unshare -rn`), skipping where that is not
+allowed.
 
 The tests double as the precise specification of generated output. When a
 question is "what order do rules come out in" or "what does flag X do", the
 answer is an `is_deeply` in `t/`, not this file. In particular
-`t/07-run-mode.t` executes the generated script under `sh` and requires argv
-identical to `-i` mode; any shell-quoting change must keep it green.
+`t/09-apply.t` is the check that the output is something iptables really
+accepts, quoting included; any change to the formatter must keep it green
+(run it on a host where `unshare -rn` works, or rely on the EL7 and RPM jobs
+in CI, which load the sample ruleset with real `iptables-restore` binaries).
 
 Gotchas that have already cost time, each also noted where it applies:
 
@@ -131,9 +136,14 @@ Non-obvious design points, each visible in `generate_rules`:
 - Nothing is emitted while parsing. `generate_rules` first `unshift`s its own
   generated rules onto the `append` lists so user `append` rules land after
   them, then walks the chains and emits.
-- Every command goes through `iptables(@)`, which prints or executes
-  depending on `-i`, and the comment helpers are no-ops under `-i`. Emit
-  rules only through `iptables(@)` so both modes stay identical.
+- Generation and output are separate. `generate_rules` records into the
+  `%ruleset` intermediate representation through `chain()`, `policy()`, and
+  `rule("[table:]chain", @iptables_args)`; comment helpers queue text that
+  attaches to the next rule. An output backend in `%backend` then formats
+  the whole thing (`format_iptables_restore`) and, under `-i`, pipes it to
+  the backend's loader. Record rules only through `rule()`, and add a new
+  output format (an `nft -f` backend is planned) as a new formatter plus
+  apply command in `%backend`, never by printing from generation code.
 - `filter:` is the default table and is stripped at parse time, so
   `filter:INPUT` and `INPUT` are the same key everywhere downstream.
 - Chain naming: one chain per interface (`label($in)`), one per ordered pair

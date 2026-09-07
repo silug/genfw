@@ -1,7 +1,8 @@
 # Sample genfw configuration: a three-interface gateway.
 #
-# This tree is used by t/08-sample.t and by CI, which runs shellcheck on the
-# script genfw generates from it. Run it by hand from this directory with:
+# This tree is used by t/08-sample.t, by t/09-apply.t, and by CI, which load
+# the ruleset genfw generates from it with a real iptables-restore. Run it by
+# hand from this directory with:
 #
 #     cd t/sample && perl ../../genfw -d
 

@@ -8,9 +8,10 @@ chains, every interface-to-interface path, NAT, anti-spoofing drops, and
 rate-limited logging of everything that falls through. Default policy is
 deny on `INPUT` and `FORWARD`.
 
-The output is either a plain shell script of `iptables` commands you can read
-and audit, or, with `-i`, the same commands executed directly. The systemd
-unit uses the latter at boot.
+The output is a complete ruleset in `iptables-restore` format, the same
+format `iptables-save` produces, so you can read it, diff it against a running
+system, or load it in one atomic step. With `-i` genfw loads it directly,
+which is what the systemd unit does at boot.
 
 ## Status
 
@@ -132,14 +133,17 @@ checkout.
 ## Running it
 
 ```sh
-genfw > firewall.sh     # print the script to review
-genfw -i                # apply it directly (what the systemd unit does)
+genfw > firewall.rules            # print the ruleset to review
+iptables-restore < firewall.rules # load it by hand
+genfw -i                          # generate and load in one step (what the systemd unit does)
 ```
 
-Applying flushes every table first and then sets policies and rules, so
-treat `-i` as a full reload. On systems using the SysV script, `service
-firewall start` does the same and also loads any kernel modules listed in
-`/etc/sysconfig/genfw/modules`.
+The ruleset lists every table, so loading it replaces the whole firewall:
+each table is swapped atomically by `iptables-restore`, and there is no
+window with a flushed, open firewall. Treat `-i` as a full reload. If
+`iptables-restore` rejects the ruleset, genfw exits non-zero and reports it.
+On systems using the SysV script, `service firewall start` does the same and
+also loads any kernel modules listed in `/etc/sysconfig/genfw/modules`.
 
 To try a configuration without root and without touching the live firewall,
 use `-d`. It reads `./genfw/rules` and `./network-scripts/ifcfg-*` from the
@@ -158,10 +162,12 @@ prove -v t/03-allow.t   # one test file
 ```
 
 The suite in `t/` exercises the script as a black box against throwaway
-configurations and never touches the real firewall. GitHub Actions runs it on
-Fedora, EL9, and Ubuntu, runs `perlcritic` on the script and tests, lints the
-shell scripts and the generated output, and builds and installs the RPM. See
-`.github/workflows/test.yml`.
+configurations and never touches the real firewall. One test loads generated
+rulesets into a real `iptables-restore` inside a private network namespace
+and skips itself where that is not possible. GitHub Actions runs the suite
+on EL7, EL9, Fedora, and Ubuntu, runs `perlcritic` on the script and tests,
+lints the shell scripts, and builds and installs the RPM, then loads the
+sample ruleset with it. See `.github/workflows/test.yml`.
 
 Contributions go through pull requests against `master`.
 
