@@ -58,16 +58,22 @@ jobs:
           fetch-depth: 0
 
       # A real release must come from master. A prerelease may be tagged on
-      # any branch, which is how the pipeline is rehearsed.
+      # any branch, which is how the pipeline is rehearsed; the check still
+      # runs for it so a rehearsal exercises these git commands, but only
+      # reports. The checkout is owned by a different uid than the
+      # container's user, so git must be told the directory is safe.
       - name: Check that a release tag points at a commit on master
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           tag='${{ github.ref_name }}'
-          case "${tag#v}" in *-*) echo "prerelease tag; not required to be on master"; exit 0;; esac
           git fetch --no-tags origin master
           if git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD; then
             echo "tag $tag ($GITHUB_SHA) is on master"
           else
-            echo "::error::tag $tag points at $GITHUB_SHA, which is not on master"; exit 1
+            case "${tag#v}" in
+              *-*) echo "::notice::prerelease tag $tag is not on master; allowed for a rehearsal";;
+              *)   echo "::error::tag $tag points at $GITHUB_SHA, which is not on master"; exit 1;;
+            esac
           fi
 
       - name: Check that the tag matches the version in genfw, genfw.spec, and debian/changelog
