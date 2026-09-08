@@ -54,8 +54,23 @@ jobs:
           gnupg2 perl perl-ExtUtils-MakeMaker systemd
 
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Check that the tag matches the version in genfw and genfw.spec
+      # A real release must come from master. A prerelease may be tagged on
+      # any branch, which is how the pipeline is rehearsed.
+      - name: Check that a release tag points at a commit on master
+        run: |
+          tag='${{ github.ref_name }}'
+          case "${tag#v}" in *-*) echo "prerelease tag; not required to be on master"; exit 0;; esac
+          git fetch --no-tags origin master
+          if git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD; then
+            echo "tag $tag ($GITHUB_SHA) is on master"
+          else
+            echo "::error::tag $tag points at $GITHUB_SHA, which is not on master"; exit 1
+          fi
+
+      - name: Check that the tag matches the version in genfw, genfw.spec, and debian/changelog
         id: version
         run: |
           tag='${{ github.ref_name }}'

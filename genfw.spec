@@ -1,5 +1,5 @@
 Name:           genfw
-Version:        1.51.0
+Version:        1.52.0
 Release:        1%{?dist}
 URL:            http://www.kspei.com/projects/genfw/
 Source0:        http://ftp.kspei.com/pub/steve/genfw/%{name}-%{version}.tar.gz
@@ -74,6 +74,17 @@ install -m 755 hooks/networkd-dispatcher \
 %{_prefix}/lib/networkd-dispatcher/routable.d/90-genfw
 
 %changelog
+* Tue Sep 08 2026 Steven Pritchard <steve@kspei.com> - 1.52.0-1
+- Learn interface addresses from ip(8) when there are no ifcfg files, so
+  genfw works on RHEL 9, Fedora, Debian, and Ubuntu ("addresses" directive).
+- /etc/genfw is the configuration directory; /etc/sysconfig/genfw still
+  works as a fallback. New -c option to choose another.
+- Run before the network comes up (genfw.service) and again after
+  (genfw-online.service); ship NetworkManager and networkd-dispatcher hooks
+  that rerun genfw when an interface appears. Add systemd scriptlets.
+- Add Debian packaging.
+- Man page is generated in section 8.
+
 * Mon Sep 07 2026 Steven Pritchard <steve@kspei.com> - 1.51.0-1
 - Output is now an iptables-restore ruleset (loaded atomically, one table at
   a time) instead of a shell script of iptables commands; -i checks it with
