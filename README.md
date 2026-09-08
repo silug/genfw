@@ -44,7 +44,8 @@ attached to each release as `RPM-GPG-KEY-genfw`. To verify and install:
 rpm --import RPM-GPG-KEY-genfw
 rpm -K genfw-<version>-1.noarch.rpm          # expect "OK"
 dnf install ./genfw-<version>-1.noarch.rpm   # yum localinstall on EL7
-systemctl enable genfw.service
+# ...write your rules (see below), then:
+systemctl enable --now genfw.service genfw-online.service
 ```
 
 Release assets also carry GitHub build provenance, which ties them to the
@@ -60,13 +61,28 @@ To build the RPM yourself from a checkout:
 make dist            # produces genfw-<version>.tar.gz and genfw-<version>-1.src.rpm
 rpmbuild -ta genfw-<version>.tar.gz
 dnf install ~/rpmbuild/RPMS/noarch/genfw-<version>-*.noarch.rpm
-systemctl enable genfw.service
 ```
 
-The package installs `/usr/sbin/genfw`, the `genfw(8)` man page, the systemd
-unit, and an empty `/etc/sysconfig/genfw/` for your rules. You can use
-`/etc/genfw/` instead (see below); the package will move there in a future
-major version.
+The package installs `/usr/sbin/genfw`, the `genfw(8)` man page, two systemd
+units, dispatcher hooks for NetworkManager and networkd-dispatcher, and an
+empty `/etc/sysconfig/genfw/` for your rules. You can use `/etc/genfw/`
+instead (see below); the package will move there in a future major version.
+Nothing is enabled by installation.
+
+### At boot and on network changes
+
+`genfw.service` runs before any interface is configured, so no traffic is
+ever handled without a firewall. `genfw-online.service` runs again after the
+network is up. With `ifcfg` files the first pass is already complete; with
+the `ip` address source the first pass lacks address-dependent rules
+(anti-spoof filtering, NAT) and the second pass adds them. Enable both.
+
+Interfaces that appear later, such as a VPN, trigger a rerun through hooks
+that call `systemctl try-restart genfw.service`: for NetworkManager, for
+`networkd-dispatcher` on systemd-networkd hosts, and for ifupdown on Debian.
+Each hook is only run by its own network stack, and `try-restart` does
+nothing unless genfw is enabled and active. After changing a static address
+by hand, `systemctl restart genfw.service`.
 
 Without packaging, `make install` runs `install.sh`, which installs the
 script under `/usr/local`, the SysV init script `firewall.init` as

@@ -17,9 +17,13 @@ iptables compatibility layer, so nothing newer than 5.16 may be used in
 job in CI enforces this; check there before assuming a construct is fine.
 
 Everything else is packaging or testing: `genfw.spec` and `genfw.rpmlintrc`
-(RPM), `genfw.service` (systemd oneshot), `firewall.init` (legacy SysV init),
-`install.sh`, `Makefile`, the test suite in `t/`, and CI in
-`.github/workflows/test.yml`. `TODO` is the upstream wishlist.
+(RPM), `genfw.service` and `genfw-online.service` (the two-pass boot: before
+`network-pre.target`, then after `network-online.target`), `hooks/` (network
+dispatcher hooks that `systemctl try-restart genfw.service` when an
+interface comes up; one per stack, each inert where its stack is absent),
+`firewall.init` (legacy SysV init), `install.sh`, `Makefile`, the test suite
+in `t/`, and CI in `.github/workflows/test.yml`. `TODO` is the upstream
+wishlist.
 
 ## Commands
 
@@ -192,7 +196,7 @@ Non-obvious design points, each visible in `generate_rules`:
 ## Known gaps
 
 `TODO` is the authoritative wishlist; `grep -n FIXME genfw` marks the code
-sites. Beyond both: no IPv6 support, and with the `ip` address source the
-shipped systemd unit is not ordered after the network comes up, so
-addresses may be unknown at boot; that needs unit ordering or a dispatcher
-hook, which is documented in the POD but not shipped.
+sites. Beyond both: no IPv6 support. The two-pass boot and the dispatcher
+hooks can only be checked with `systemd-analyze verify` and a fake
+`systemctl` in this repo's tests and CI (containers have no running
+systemd); their behaviour on a real boot has to be observed on a host.

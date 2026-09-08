@@ -1,0 +1,14 @@
+#!/bin/sh
+# ifupdown hook for genfw (Debian-style /etc/network/interfaces).
+# Installed as /etc/network/if-up.d/genfw.
+#
+# Runs after an interface is brought up by ifup. See
+# NetworkManager-dispatcher for why this goes through "systemctl
+# try-restart" rather than genfw -i. ifup sets IFACE; "--all" runs once for
+# the whole set at boot, which is fine.
+case "${MODE:-start}" in
+    start)
+        exec systemctl try-restart genfw.service
+        ;;
+esac
+exit 0

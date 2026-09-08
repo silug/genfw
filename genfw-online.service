@@ -1,0 +1,20 @@
+# Late pass: regenerate the firewall once the network is up, so rules that
+# depend on interface addresses (anti-spoof filtering, NAT) are present when
+# addresses come from the running system ("addresses ip"). Harmless and
+# quick when addresses come from ifcfg files. Interfaces that appear later
+# (a VPN, say) are handled by the dispatcher hooks, which restart
+# genfw.service.
+[Unit]
+Description=Configure firewall using genfw (after network is up)
+Documentation=man:genfw(8)
+Wants=network-online.target
+After=network-online.target genfw.service
+Requisite=genfw.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/genfw -i
+
+[Install]
+WantedBy=multi-user.target

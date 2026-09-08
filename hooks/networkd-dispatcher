@@ -1,0 +1,12 @@
+#!/bin/sh
+# networkd-dispatcher hook for genfw (systemd-networkd systems).
+# Installed as /usr/lib/networkd-dispatcher/routable.d/90-genfw.
+#
+# Runs when an interface becomes routable. See NetworkManager-dispatcher for
+# why this goes through "systemctl try-restart" rather than genfw -i.
+case "${STATE:-}" in
+    routable)
+        exec systemctl try-restart genfw.service
+        ;;
+esac
+exit 0

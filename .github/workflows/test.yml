@@ -109,7 +109,7 @@ jobs:
       # which is bash, so it is checked as bash.
       - name: shellcheck shell scripts
         run: |
-          shellcheck --severity=warning install.sh
+          shellcheck --severity=warning install.sh hooks/*
           shellcheck --severity=warning --shell=bash firewall.init
 
       # rpmlint picks up genfw.rpmlintrc automatically. Its spelling filter
@@ -171,7 +171,12 @@ jobs:
           test -x /usr/sbin/genfw
           test -f /usr/share/man/man8/genfw.8.gz
           man -w genfw
-          systemd-analyze verify /usr/lib/systemd/system/genfw.service
+          systemd-analyze verify /usr/lib/systemd/system/genfw.service /usr/lib/systemd/system/genfw-online.service
+          test -x /usr/lib/NetworkManager/dispatcher.d/90-genfw
+          test -x /usr/lib/networkd-dispatcher/routable.d/90-genfw
+          # Scriptlets differ by platform (file triggers on Fedora, explicit
+          # systemctl calls on EL); show them rather than assert on them.
+          rpm -q --scripts genfw || true
           iptables-restore --version
 
       # The real thing: the installed genfw generates and loads the sample

@@ -337,7 +337,12 @@ sub generate_rules {
                         or !@{$interface{$iface}->{'cfg'}}) {
                         debug "I have no configuration for interface $iface!\n";
                         # FIXME: "nat" on undefined interface breaks everything.
-                        warn "No configuration found for interface $iface.\n";
+                        # Expected on the early boot pass with the "ip"
+                        # address source, when nothing has an address yet;
+                        # genfw-online.service runs again once it does.
+                        warn "No addresses known for interface $iface "
+                           . "(not configured, or not up yet); skipping NAT "
+                           . "involving it this run.\n";
                         next;
                     }
                 }
@@ -1420,6 +1425,33 @@ will be removed in a future major version.
 
 F</etc/sysconfig/network-scripts/ifcfg-*> The network configuration, when
 using the C<ifcfg> address source.
+
+=head1 SYSTEMD INTEGRATION
+
+Two units are installed. C<genfw.service> runs C<genfw -i> before any
+interface is configured (C<Before=network-pre.target>), so no traffic is
+ever handled without a firewall. C<genfw-online.service> runs it again after
+C<network-online.target>. With the C<ifcfg> address source the first pass is
+already complete and the second is a harmless repeat. With the C<ip> source
+the first pass lacks whatever depends on addresses (network and broadcast
+filtering, NAT) because nothing has an address yet, and the second pass adds
+it. Enable both:
+
+    systemctl enable --now genfw.service genfw-online.service
+
+Interfaces that appear after boot (a VPN, a hotplugged device) are covered
+by hooks that run C<systemctl try-restart genfw.service> when an interface
+comes up: one for NetworkManager (F<dispatcher.d>), one for
+networkd-dispatcher (F<routable.d>), and one for ifupdown (F<if-up.d>).
+Each is only ever run by the stack it belongs to. C<try-restart> does
+nothing unless C<genfw.service> is active, so an installed but disabled
+genfw never touches the firewall. A DHCP renewal does not trigger a rerun
+and does not need one, since dynamic addresses are never written into the
+rules. After changing a static address by hand, run
+C<systemctl restart genfw.service>.
+
+Neither unit is enabled by installation: a host with no F<rules> file must
+not start a firewall.
 
 =head1 NOTES
 
