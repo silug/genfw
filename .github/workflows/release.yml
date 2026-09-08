@@ -63,9 +63,11 @@ jobs:
           prerelease=false; [ "$version" != "${tag#v}" ] && prerelease=true
           script_version=$(perl -ne 'print $1 if /^our \$VERSION\s*=\s*"([^"]+)"/' genfw)
           spec_version=$(awk '/^Version:/ {print $2}' genfw.spec)
-          echo "tag=$tag version=$version genfw=$script_version spec=$spec_version prerelease=$prerelease"
+          deb_version=$(head -1 debian/changelog | sed 's/^genfw (\(.*\)).*/\1/')
+          echo "tag=$tag version=$version genfw=$script_version spec=$spec_version deb=$deb_version prerelease=$prerelease"
           [ "$version" = "$script_version" ] || { echo "::error::tag $tag does not match \$VERSION $script_version in genfw"; exit 1; }
           [ "$version" = "$spec_version" ]   || { echo "::error::tag $tag does not match Version $spec_version in genfw.spec"; exit 1; }
+          [ "${deb_version%-*}" = "$version" ] || { echo "::error::tag $tag does not match debian/changelog version $deb_version"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
@@ -149,11 +151,40 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  # The Debian package, built separately on Debian stable. Not GPG-signed
+  # individually (apt verifies repositories, not .deb files); it is covered
+  # by the signed SHA256SUMS and by the provenance attestation.
+  build-deb:
+    name: Build Debian package
+    runs-on: ubuntu-latest
+    container: debian:stable
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update -q
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+            build-essential debhelper perl lintian iproute2 netbase git
+
+      - uses: actions/checkout@v4
+
+      - name: Build and lint
+        run: |
+          dpkg-buildpackage -us -uc -b
+          mkdir -p dist-deb && cp ../genfw_*.deb dist-deb/
+          lintian --fail-on warning,error dist-deb/genfw_*.deb
+          ls -l dist-deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-deb
+          path: dist-deb/
+          if-no-files-found: error
+
   # Install the exact artifacts that will be published, on every supported
   # platform, verifying the signature where a key is present.
   verify:
     name: Verify install (${{ matrix.name }})
-    needs: build
+    needs: [build, build-deb]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -175,12 +206,29 @@ jobs:
             setup: |
               dnf install -y -q --setopt=install_weak_deps=False iptables-nft
               install() { dnf install -y -q --setopt=install_weak_deps=False "$@"; }
+          - name: Debian
+            image: debian:stable
+            pkg: deb
+            setup: |
+              apt-get update -q
+              install() { DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends "$@"; }
+          - name: Ubuntu
+            image: ubuntu:latest
+            pkg: deb
+            setup: |
+              apt-get update -q
+              install() { DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends "$@"; }
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
           name: dist
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-deb
           path: dist
 
       # Run via docker rather than a job container so EL7 works too (its
@@ -190,17 +238,24 @@ jobs:
           cat > /tmp/verify.sh <<'EOS'
           set -e
           ${{ matrix.setup }}
-          rpm --version
-          if [ -f /dist/RPM-GPG-KEY-genfw ]; then
-            rpm --import /dist/RPM-GPG-KEY-genfw
-            rpm -K /dist/genfw-*.noarch.rpm
-            rpm -K /dist/genfw-*.src.rpm
+          if [ "${{ matrix.pkg }}" = deb ]; then
+            install /dist/genfw_*.deb
+            dpkg -s genfw | grep -E '^(Version|Depends)'
+            dpkg -L genfw
+            test -x /etc/network/if-up.d/genfw
           else
-            echo "no signing key in artifacts; skipping signature check"
+            rpm --version
+            if [ -f /dist/RPM-GPG-KEY-genfw ]; then
+              rpm --import /dist/RPM-GPG-KEY-genfw
+              rpm -K /dist/genfw-*.noarch.rpm
+              rpm -K /dist/genfw-*.src.rpm
+            else
+              echo "no signing key in artifacts; skipping signature check"
+            fi
+            install /dist/genfw-*.noarch.rpm
+            rpm -qi genfw | grep -E '^(Version|Release|Signature)'
+            rpm -ql genfw
           fi
-          install /dist/genfw-*.noarch.rpm
-          rpm -qi genfw | grep -E '^(Version|Release|Signature)'
-          rpm -ql genfw
           test -x /usr/sbin/genfw
           test -f /usr/lib/systemd/system/genfw-online.service
           test -x /usr/lib/NetworkManager/dispatcher.d/90-genfw
@@ -215,7 +270,7 @@ jobs:
 
   release:
     name: Publish release
-    needs: [build, verify]
+    needs: [build, build-deb, verify]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -227,8 +282,17 @@ jobs:
           name: dist
           path: dist
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-deb
+          path: dist
+
+      # The .deb was built after SHA256SUMS was signed; add its checksum in
+      # a second, separately signed file rather than re-sign here (the key
+      # only lives in the build job's environment).
       - name: List assets
-        run: ls -l dist
+        run: |
+          cd dist && sha256sum genfw_*.deb > SHA256SUMS.deb && ls -l && cat SHA256SUMS SHA256SUMS.deb
 
       # Keyless provenance: proves these files were built by this workflow
       # at this commit. Verify with: gh attestation verify <file> --owner silug
@@ -237,6 +301,7 @@ jobs:
           subject-path: |
             dist/genfw-*.tar.gz
             dist/genfw-*.rpm
+            dist/genfw_*.deb
 
       - uses: softprops/action-gh-release@v3
         with:

@@ -1,0 +1,2 @@
+genfw.service usr/lib/systemd/system
+genfw-online.service usr/lib/systemd/system

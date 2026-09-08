@@ -26,7 +26,7 @@ firewall by using a simple text-based configuration file.
 %setup -q
 
 %build
-pod2man genfw > genfw.8
+pod2man --section=8 --center="System Administration" --release="genfw" genfw > genfw.8
 
 %check
 perl -e 'for (glob("t/*.t")) { system($^X, $_) == 0 or die "$_ failed\n" }'

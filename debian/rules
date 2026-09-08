@@ -1,0 +1,28 @@
+#!/usr/bin/make -f
+# genfw is a single script; there is nothing to build except the man page.
+%:
+	dh $@
+
+override_dh_auto_build:
+	pod2man --section=8 --center="System Administration" --release="genfw" genfw > genfw.8
+
+override_dh_auto_install:
+	install -D -m 755 genfw debian/genfw/usr/sbin/genfw
+	install -D -m 755 hooks/NetworkManager-dispatcher \
+	    debian/genfw/usr/lib/NetworkManager/dispatcher.d/90-genfw
+	install -D -m 755 hooks/networkd-dispatcher \
+	    debian/genfw/usr/lib/networkd-dispatcher/routable.d/90-genfw
+	install -D -m 755 hooks/if-up debian/genfw/etc/network/if-up.d/genfw
+	install -d debian/genfw/etc/genfw
+
+override_dh_auto_test:
+	prove t
+
+# A host with no rules file must not start a firewall; the admin enables
+# the units after writing /etc/genfw/rules.
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start genfw.service
+	dh_installsystemd --no-enable --no-start genfw-online.service
+
+override_dh_auto_clean:
+	rm -f genfw.8
