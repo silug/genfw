@@ -155,8 +155,10 @@ return the same hash shape, and a DHCP address (`BOOTPROTO=dhcp` or ip's
 directive picks one; otherwise `ifcfg` is used when any `ifcfg-*` file
 exists, else `ip`. `t/10-addresses.t` pins that the same network described
 either way gives identical rules. The `ip` text format was chosen over
-`-json` because EL7's iproute predates JSON output and JSON::PP is another
-split-out module; tests use a fake `ip` on PATH.
+`-json` because EL7's iproute predates JSON output; tests use a fake `ip`
+on PATH. Core Perl modules are fine to use when they are needed (the RPM's
+dependency generator picks them up automatically); the constraint is Perl
+5.16, not module count.
 
 Non-obvious design points, each visible in `generate_rules`:
 
