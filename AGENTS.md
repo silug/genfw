@@ -24,9 +24,10 @@ the suite runs inside the build), `genfw.service` and `genfw-online.service`
 package upgrades restart the first), `hooks/` (network
 dispatcher hooks that `systemctl try-restart genfw.service` when an
 interface comes up; one per stack, each inert where its stack is absent),
-`firewall.init` (legacy SysV init), `install.sh`, `Makefile`, the test suite
-in `t/`, and CI in `.github/workflows/test.yml`. `TODO` is the upstream
-wishlist.
+the `Makefile` (developer targets: `test`, `lint`, `dist`, `rpm`, `deb`,
+`install`), the test suite in `t/`, and CI in `.github/workflows/test.yml`.
+`TODO` is the upstream wishlist. SysV support (`install.sh`,
+`firewall.init`) was removed after 1.52.1; EL7 is the floor and has systemd.
 
 ## Commands
 
@@ -39,7 +40,10 @@ perlcritic genfw t/lib/GenfwTest.pm t/*.t   # style check; CI enforces this, con
 perldoc ./genfw               # read the docs / verify POD renders
 
 make dist                     # tarball + .src.rpm in cwd (version parsed from $VERSION in genfw)
-make install                  # runs install.sh (installs to /usr/local, SysV init; needs root)
+make lint                     # perl -c, podchecker, perlcritic, shellcheck, rpmlint: what CI's lint job runs
+make rpm                      # binary RPM from the tarball, as the release builds it (runs %check)
+make deb                      # Debian package, as the release builds it
+make install                  # install by hand under /usr (DESTDIR/PREFIX honoured); enables nothing
 ```
 
 The lint and RPM-build commands CI uses are in `.github/workflows/test.yml`;
@@ -65,7 +69,7 @@ Without either, the config directory is `/etc/genfw` if it exists, else the
 historical `/etc/sysconfig/genfw` (kept until a major version; the RPM still
 ships that directory). See the option handling at the top of `genfw` for
 exactly what is read. Without `-i`, genfw prints an `iptables-restore` ruleset to
-stdout. With `-i` (what the systemd unit and init script use) it pipes that
+stdout. With `-i` (what the systemd units use) it pipes that
 same text to `iptables-restore` and prints nothing. Never run `-i` casually:
 the ruleset lists every table, so loading it replaces the whole firewall.
 

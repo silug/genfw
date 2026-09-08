@@ -29,7 +29,7 @@ jobs:
             install: >-
               dnf install -y --setopt=install_weak_deps=False
               git make perl perl-DirHandle perl-Test-Simple perl-Test-Harness
-              perl-Test-Pod perl-ExtUtils-MakeMaker perl-podlators
+              perl-Test-Pod perl-podlators
           # Enterprise Linux 9 (perl-Test-Pod is EPEL-only; the POD test
           # skips itself when the module is missing).
           - name: EL9
@@ -37,7 +37,7 @@ jobs:
             install: >-
               dnf install -y --setopt=install_weak_deps=False
               git make perl perl-DirHandle perl-Test-Simple perl-Test-Harness
-              perl-ExtUtils-MakeMaker perl-podlators
+              perl-podlators
           # Debian-family runner with a stock perl, which bundles the core
           # modules. Runs directly on the host runner (no container).
           - name: Ubuntu
@@ -77,7 +77,7 @@ jobs:
             sed -i -e "s|^mirrorlist=|#mirrorlist=|g" \
                    -e "s|^#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g" \
                    /etc/yum.repos.d/CentOS-*.repo
-            yum install -y -q perl perl-Test-Simple perl-Test-Harness perl-ExtUtils-MakeMaker make iptables
+            yum install -y -q perl perl-Test-Simple perl-Test-Harness make iptables
             cp -r /src /work && cd /work
             perl -v | sed -n 2p
             make test
@@ -105,12 +105,8 @@ jobs:
       - name: perlcritic
         run: perlcritic genfw t/lib/GenfwTest.pm t/*.t
 
-      # install.sh is POSIX sh. firewall.init sources /etc/init.d/functions,
-      # which is bash, so it is checked as bash.
       - name: shellcheck shell scripts
-        run: |
-          shellcheck --severity=warning install.sh hooks/* debian/genfw.postinst
-          shellcheck --severity=warning --shell=bash firewall.init
+        run: shellcheck --severity=warning hooks/* debian/genfw.postinst
 
       # rpmlint picks up genfw.rpmlintrc automatically. Its spelling filter
       # only matches built packages, so tell rpmlint not to fail on the
@@ -175,7 +171,7 @@ jobs:
         run: >-
           dnf install -y --setopt=install_weak_deps=False
           git make rpm-build rpmdevtools rpmlint 'dnf-command(builddep)'
-          perl perl-ExtUtils-MakeMaker systemd man-db glibc-langpack-en
+          perl systemd man-db glibc-langpack-en
 
       - uses: actions/checkout@v4
 
