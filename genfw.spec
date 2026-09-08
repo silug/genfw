@@ -65,6 +65,18 @@ if [ $1 -gt 1 ] ; then
     fi
 fi
 
+# Runs after everything else in the transaction, including the previous
+# package's %%postun that restarts the unit, so a failure to regenerate the
+# firewall (a rules file that no longer parses, say) is reported here where
+# the person upgrading can see it, rather than only in the journal. The
+# upgrade itself still succeeds; the rules in effect are the previous ones.
+%posttrans
+if systemctl is-enabled --quiet genfw.service 2>/dev/null \
+   && systemctl is-failed --quiet genfw.service 2>/dev/null ; then
+    echo "warning: genfw.service failed to regenerate the firewall after this upgrade;" >&2
+    echo "         see 'systemctl status genfw.service' and 'journalctl -u genfw.service'." >&2
+fi
+
 %preun
 %systemd_preun genfw.service genfw-online.service
 
