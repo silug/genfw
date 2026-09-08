@@ -39,6 +39,7 @@ sub filter_to;
 sub generate_rules;
 sub parserules;
 sub parseconfig;
+sub default_config_dir;
 sub ifcfg_addresses;
 sub ip_addresses;
 sub prefix_to_netmask;
@@ -92,7 +93,8 @@ our $sysconfig_dir;   # holds network-scripts/
 our $config_dir;      # holds rules, rules.d/, and include targets
 our %opt=();
 
-getopts('id', \%opt);
+getopts('c:di', \%opt)
+    or die "Usage: genfw [-c config-dir] [-d] [-i]\n";
 
 if (defined($ENV{'DEBUG'}) || $opt{'d'}) {
     $sysconfig_dir=".";
@@ -103,7 +105,16 @@ if (defined($ENV{'DEBUG'}) || $opt{'d'}) {
     select($oldfh);
 } else {
     $sysconfig_dir="/etc/sysconfig";
-    $config_dir="$sysconfig_dir/genfw";
+    # /etc/genfw is the canonical location. /etc/sysconfig/genfw is where it
+    # lived historically (and where the RPM still creates the directory); it
+    # is used when /etc/genfw does not exist.
+    $config_dir=default_config_dir("/etc/genfw", "$sysconfig_dir/genfw");
+}
+
+if (defined($opt{'c'})) {
+    -d $opt{'c'}
+        or die "Configuration directory $opt{'c'} does not exist.\n";
+    $config_dir=$opt{'c'};
 }
 
 # Default
@@ -136,7 +147,7 @@ for my $rules ("$config_dir/rules",
     }
 }
 
-die "No rules found!  Exiting...\n" if (!$rules_found);
+die "No rules found in $config_dir!  Exiting...\n" if (!$rules_found);
 
 # Where interface addresses come from: "ifcfg" reads the Red Hat
 # network-scripts files, "ip" asks the running kernel through ip(8). The
@@ -829,6 +840,19 @@ sub parserules {
     }
 }
 
+# The first of @candidates that exists, warning if more than one does since
+# only one is read. Falls back to the first candidate when none exist, so
+# the "no rules found" error names the canonical location.
+sub default_config_dir {
+    my @candidates=@_;
+    my @found=grep { -d $_ } @candidates;
+
+    return $candidates[0] unless (@found);
+    warn "Using configuration in $found[0]; ignoring @found[1..$#found].\n"
+        if (@found > 1);
+    return $found[0];
+}
+
 # Addresses for interface $name from network-scripts/ifcfg-$name and any
 # ifcfg-$name:N aliases. Returns a list of config hashes (see parseconfig).
 sub ifcfg_addresses {
@@ -1194,6 +1218,12 @@ also be run directly to load itself. With B<-i> it is loaded directly.
 
 =over 4
 
+=item B<-c> I<directory>
+
+Read F<rules> and F<rules.d/*.rules> from I<directory> instead of the
+default location (see L</FILES>). Relative C<include> paths are resolved
+against it too.
+
 =item B<-i>
 
 Install the ruleset: pipe it to C<iptables-restore> instead of printing it.
@@ -1206,8 +1236,8 @@ script run.
 =item B<-d>
 
 Debug mode. Read F<genfw/rules>, F<genfw/rules.d/*.rules>, and
-F<network-scripts/ifcfg-*> from the current directory instead of
-F</etc/sysconfig>, and print tracing to standard error. Setting the
+F<network-scripts/ifcfg-*> from the current directory instead of F</etc>,
+and print tracing to standard error. Setting the
 C<DEBUG> environment variable has the same effect and also dumps the parsed
 interface table. Useful for trying a configuration without root and
 without touching the live firewall.
@@ -1379,9 +1409,14 @@ This only applies to traffic from an "internal" or "dmz" interface to an
 
 =head1 FILES
 
-F</etc/sysconfig/genfw/rules>   The rules used to generate the firewall.
+F</etc/genfw/rules>   The rules used to generate the firewall.
 
-F</etc/sysconfig/genfw/rules.d/*.rules>   Additional rules used to generate the firewall.
+F</etc/genfw/rules.d/*.rules>   Additional rules used to generate the firewall.
+
+F</etc/sysconfig/genfw/>   The historical location of the above. It is used
+when F</etc/genfw> does not exist; if both exist, F</etc/genfw> wins and a
+warning is printed. The RPM still creates this directory. Support for it
+will be removed in a future major version.
 
 F</etc/sysconfig/network-scripts/ifcfg-*> The network configuration, when
 using the C<ifcfg> address source.

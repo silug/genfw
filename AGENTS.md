@@ -52,9 +52,12 @@ Running locally without touching the live firewall:
 cd t/sample && perl ../../genfw -d   # against the checked-in sample config
 ```
 
-`-d` (or `DEBUG` in the environment) points `$config_dir` at `.` instead of
-`/etc/sysconfig`; see the option handling at the top of `genfw` for exactly
-what is read. Without `-i`, genfw prints an `iptables-restore` ruleset to
+`-d` (or `DEBUG` in the environment) points the config and sysconfig
+directories at `.`; `-c DIR` overrides the config directory in either mode.
+Without either, the config directory is `/etc/genfw` if it exists, else the
+historical `/etc/sysconfig/genfw` (kept until a major version; the RPM still
+ships that directory). See the option handling at the top of `genfw` for
+exactly what is read. Without `-i`, genfw prints an `iptables-restore` ruleset to
 stdout. With `-i` (what the systemd unit and init script use) it pipes that
 same text to `iptables-restore` and prints nothing. Never run `-i` casually:
 the ruleset lists every table, so loading it replaces the whole firewall.
@@ -155,8 +158,10 @@ return the same hash shape, and a DHCP address (`BOOTPROTO=dhcp` or ip's
 directive picks one; otherwise `ifcfg` is used when any `ifcfg-*` file
 exists, else `ip`. `t/10-addresses.t` pins that the same network described
 either way gives identical rules. The `ip` text format was chosen over
-`-json` because EL7's iproute predates JSON output and JSON::PP is another
-split-out module; tests use a fake `ip` on PATH.
+`-json` because EL7's iproute predates JSON output; tests use a fake `ip`
+on PATH. Core Perl modules are fine to use when they are needed (the RPM's
+dependency generator picks them up automatically); the constraint is Perl
+5.16, not module count.
 
 Non-obvious design points, each visible in `generate_rules`:
 

@@ -196,7 +196,7 @@ RULES
 {
     my $res = run_genfw(make_fixture(ifcfg => \%ifcfg));
     isnt($res->{status}, 0, 'no rules file: non-zero exit');
-    like($res->{stderr}, qr/No rules found!/, 'no rules file: error message');
+    like($res->{stderr}, qr/No rules found in \S+!/, 'no rules file: error message names the directory');
 }
 {
     my $res = run_rules("int\nout eth0\n");
