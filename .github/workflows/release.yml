@@ -202,6 +202,8 @@ jobs:
           rpm -qi genfw | grep -E '^(Version|Release|Signature)'
           rpm -ql genfw
           test -x /usr/sbin/genfw
+          test -f /usr/lib/systemd/system/genfw-online.service
+          test -x /usr/lib/NetworkManager/dispatcher.d/90-genfw
           cd /src/t/sample
           /usr/sbin/genfw -d 2> >(grep -v '^d: ' >&2) > /tmp/sample.rules
           rules=$(grep -c '^-A' /tmp/sample.rules)

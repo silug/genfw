@@ -1,10 +1,22 @@
+# Early pass: bring the firewall up before any interface is configured, so
+# no traffic is ever handled without rules. With the "ip" address source
+# no addresses are known yet at this point, so the ruleset is complete
+# except for address-dependent parts (anti-spoof filtering, NAT); those are
+# added by genfw-online.service once the network is up. With the "ifcfg"
+# source this pass is already complete.
 [Unit]
-Description=Configure firewall using genfw
+Description=Configure firewall using genfw (before network)
+Documentation=man:genfw(8)
+DefaultDependencies=no
+Wants=network-pre.target
+Before=network-pre.target shutdown.target
+After=local-fs.target
+Conflicts=shutdown.target
 
 [Service]
 Type=oneshot
+RemainAfterExit=yes
 ExecStart=/usr/sbin/genfw -i
 
 [Install]
-WantedBy=network.target
-WantedBy=network.service
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+#!/bin/sh
+# NetworkManager dispatcher hook for genfw.
+# Installed as /usr/lib/NetworkManager/dispatcher.d/90-genfw.
+#
+# When an interface (or VPN) comes up, regenerate the firewall so rules that
+# depend on interface addresses cover it. Goes through the unit rather than
+# running genfw directly: "try-restart" does nothing unless genfw.service is
+# active, so an installed but unused genfw never touches the firewall.
+case "$2" in
+    up|vpn-up)
+        exec systemctl try-restart genfw.service
+        ;;
+esac
+exit 0

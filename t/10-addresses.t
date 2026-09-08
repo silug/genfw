@@ -118,7 +118,7 @@ my %ip = (
         make_fixture(rules => "int eth1 nat\nout eth0\n", no_network_scripts => 1),
         env => { PATH => "$bindir:$ENV{PATH}" },
     );
-    ok((grep { /No configuration found for interface eth1/ } @{$res->{warnings}}), 'unknown device with nat warns, as a missing ifcfg did');
+    ok((grep { /No addresses known for interface eth1/ } @{$res->{warnings}}), 'unknown device with nat warns, as a missing ifcfg did');
 }
 
 # --- No ip command at all.

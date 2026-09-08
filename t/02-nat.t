@@ -111,7 +111,7 @@ my %ifcfg = (
         rules => "int eth1 nat\nout eth0\n",
         ifcfg => { eth0 => "DEVICE=eth0\nBOOTPROTO=dhcp\n" },
     ));
-    ok((grep { /No configuration found for interface eth1/ } @{$res->{warnings}}),
+    ok((grep { /No addresses known for interface eth1/ } @{$res->{warnings}}),
         'warns when a NATed interface has no ifcfg file');
 }
 
