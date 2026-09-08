@@ -1,3 +1,11 @@
+genfw (1.52.0-1) unstable; urgency=medium
+
+  * New upstream release: ip(8) address source, /etc/genfw configuration
+    directory with -c override, two-pass boot units and dispatcher hooks.
+  * First release with Debian packaging.
+
+ -- Steven Pritchard <steve@kspei.com>  Tue, 08 Sep 2026 01:49:02 +0000
+
 genfw (1.51.0-1) unstable; urgency=medium
 
   * Initial Debian packaging.
