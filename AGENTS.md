@@ -52,9 +52,12 @@ Running locally without touching the live firewall:
 cd t/sample && perl ../../genfw -d   # against the checked-in sample config
 ```
 
-`-d` (or `DEBUG` in the environment) points `$config_dir` at `.` instead of
-`/etc/sysconfig`; see the option handling at the top of `genfw` for exactly
-what is read. Without `-i`, genfw prints an `iptables-restore` ruleset to
+`-d` (or `DEBUG` in the environment) points the config and sysconfig
+directories at `.`; `-c DIR` overrides the config directory in either mode.
+Without either, the config directory is `/etc/genfw` if it exists, else the
+historical `/etc/sysconfig/genfw` (kept until a major version; the RPM still
+ships that directory). See the option handling at the top of `genfw` for
+exactly what is read. Without `-i`, genfw prints an `iptables-restore` ruleset to
 stdout. With `-i` (what the systemd unit and init script use) it pipes that
 same text to `iptables-restore` and prints nothing. Never run `-i` casually:
 the ruleset lists every table, so loading it replaces the whole firewall.

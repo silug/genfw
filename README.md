@@ -64,7 +64,9 @@ systemctl enable genfw.service
 ```
 
 The package installs `/usr/sbin/genfw`, the `genfw(8)` man page, the systemd
-unit, and an empty `/etc/sysconfig/genfw/` for your rules.
+unit, and an empty `/etc/sysconfig/genfw/` for your rules. You can use
+`/etc/genfw/` instead (see below); the package will move there in a future
+major version.
 
 Without packaging, `make install` runs `install.sh`, which installs the
 script under `/usr/local`, the SysV init script `firewall.init` as
@@ -76,10 +78,15 @@ package is also needed; the RPM pulls it in automatically.
 
 ## Configuration
 
-genfw reads `/etc/sysconfig/genfw/rules` and any `/etc/sysconfig/genfw/rules.d/*.rules`,
-then learns the addresses of each interface named in them, from `ifcfg-*`
-files or from `ip` (see `addresses` below). `#` starts a comment and a
-trailing `\` continues a line.
+genfw reads `rules` and any `rules.d/*.rules` from its configuration
+directory, then learns the addresses of each interface named in them, from
+`ifcfg-*` files or from `ip` (see `addresses` below). `#` starts a comment
+and a trailing `\` continues a line.
+
+The configuration directory is `/etc/genfw` if it exists, otherwise the
+historical `/etc/sysconfig/genfw`; `-c DIR` overrides both. If both
+directories exist, `/etc/genfw` is used and genfw warns about the other.
+On a Debian-family system, create `/etc/genfw`.
 
 A three-interface gateway, taken from `t/sample/genfw/rules` in this
 repository:
@@ -145,7 +152,7 @@ Each `allow=` item is `port[/proto][:src[:dst[:iface]]]`:
 | `chain` [*table*`:`]*name* [*comment*] | Create a user chain for use with `append` and `insert`. |
 | `policy` [*table*`:`]*chain* *target* | Set a built-in chain's policy. Defaults are `INPUT DROP`, `OUTPUT ACCEPT`, `FORWARD DROP`. |
 | `no logging`, `limit logging`, `full logging` | Control logging of dropped packets. `limit` is the default and adds `-m limit` to every `LOG` rule. |
-| `include` *file* | Read more rules from *file*, a path relative to `/etc/sysconfig/genfw/` or absolute, and it may be a glob. |
+| `include` *file* | Read more rules from *file*, a path relative to the configuration directory or absolute, and it may be a glob. |
 | `addresses` `ifcfg` or `ip` | Where interface addresses come from: Red Hat `ifcfg-*` files, or the running system via `ip -o -4 addr show`. Default: `ifcfg` if any `ifcfg-*` file exists, else `ip`. With `ip`, run genfw after the network is up (order the unit after `network-online.target`, or re-run from a dispatcher hook); a DHCP-assigned address is treated like `BOOTPROTO=dhcp`. |
 
 genfw defines three chains you can jump to from your own rules: `acceptnew`
@@ -159,6 +166,7 @@ checkout.
 
 ```sh
 genfw > firewall.rules            # print the ruleset to review
+genfw -c /path/to/dir > out.rules # ...using another configuration directory
 iptables-restore < firewall.rules # load it by hand...
 chmod +x firewall.rules && ./firewall.rules   # ...or run it; the #! line invokes iptables-restore
 genfw -i                          # generate and load in one step (what the systemd unit does)
