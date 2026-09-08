@@ -7,7 +7,7 @@ TARBALL := genfw-$(VERSION).tar.gz
 SRPM    := genfw-$(VERSION)-1.src.rpm
 
 # Everything that goes into the release tarball.
-FILES = genfw Makefile genfw.spec genfw.rpmlintrc TODO README.md AGENTS.md \
+FILES = genfw Makefile genfw.spec genfw.rpmlintrc README.md AGENTS.md \
         genfw.service genfw-online.service hooks debian t
 
 # Install locations for "make install" (DESTDIR for staging).

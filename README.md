@@ -30,7 +30,8 @@ genfw is mature and small (one Perl script). Things to know:
   enabled.
 
 The RPM targets EL7 and later; the `.deb` targets current Debian and Ubuntu.
-See `TODO` for the wishlist.
+Planned work is tracked in the
+[GitHub issues](https://github.com/silug/genfw/issues).
 
 ## Installation
 

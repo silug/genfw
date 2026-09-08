@@ -26,8 +26,10 @@ dispatcher hooks that `systemctl try-restart genfw.service` when an
 interface comes up; one per stack, each inert where its stack is absent),
 the `Makefile` (developer targets: `test`, `lint`, `dist`, `rpm`, `deb`,
 `install`), the test suite in `t/`, and CI in `.github/workflows/test.yml`.
-`TODO` is the upstream wishlist. SysV support (`install.sh`,
-`firewall.init`) was removed after 1.52.1; EL7 is the floor and has systemd.
+Planned work lives in GitHub issues (`gh issue list`), labelled by theme;
+the old `TODO` file was converted to issues and removed. SysV support
+(`install.sh`, `firewall.init`) was removed after 1.52.1; EL7 is the floor
+and has systemd.
 
 ## Commands
 
@@ -206,8 +208,9 @@ Non-obvious design points, each visible in `generate_rules`:
 
 ## Known gaps
 
-`TODO` is the authoritative wishlist; `grep -n FIXME genfw` marks the code
-sites. Beyond both: no IPv6 support. The two-pass boot and the dispatcher
+GitHub issues are the wishlist; `grep -n FIXME genfw` marks code sites for
+several of them. The largest gap is IPv6 (issue #22), which also drives the
+configuration-format change (#23). The two-pass boot and the dispatcher
 hooks can only be checked with `systemd-analyze verify` and a fake
 `systemctl` in this repo's tests and CI (containers have no running
 systemd); their behaviour on a real boot has to be observed on a host.
