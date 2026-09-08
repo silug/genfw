@@ -85,6 +85,8 @@ for my $hook (qw(NetworkManager-dispatcher networkd-dispatcher if-up)) {
     like($early, qr/^RemainAfterExit=yes/m, 'genfw.service stays active so try-restart has something to restart');
     like($late,  qr/^After=network-online\.target genfw\.service/m, 'genfw-online.service runs after the network is online and after the early pass');
     like($late,  qr/^Wants=network-online\.target/m, 'genfw-online.service pulls in network-online.target');
+    like($late,  qr/^Requires=genfw\.service/m, 'genfw-online.service starts the early pass if it is not active');
+    unlike($late, qr/^Requisite=/m, 'genfw-online.service does not use Requisite, which fails instead of starting');
     for my $unit ($early, $late) {
         like($unit, qr{^ExecStart=/usr/sbin/genfw -i$}m, 'unit runs genfw -i');
         like($unit, qr/^WantedBy=multi-user\.target/m, 'unit is enabled into multi-user.target');

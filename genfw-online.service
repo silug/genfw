@@ -9,7 +9,10 @@ Description=Configure firewall using genfw (after network is up)
 Documentation=man:genfw(8)
 Wants=network-online.target
 After=network-online.target genfw.service
-Requisite=genfw.service
+# Requires, not Requisite: starting this unit alone (or after upgrading from
+# a genfw whose unit did not RemainAfterExit) must start the early pass
+# rather than fail because it is not already active.
+Requires=genfw.service
 
 [Service]
 Type=oneshot
