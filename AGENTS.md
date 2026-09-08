@@ -17,7 +17,8 @@ iptables compatibility layer, so nothing newer than 5.16 may be used in
 job in CI enforces this; check there before assuming a construct is fine.
 
 Everything else is packaging or testing: `genfw.spec` and `genfw.rpmlintrc`
-(RPM), `genfw.service` and `genfw-online.service` (the two-pass boot: before
+(RPM), `debian/` (Debian package; built with `dpkg-buildpackage -us -uc -b`,
+the suite runs inside the build), `genfw.service` and `genfw-online.service` (the two-pass boot: before
 `network-pre.target`, then after `network-online.target`), `hooks/` (network
 dispatcher hooks that `systemctl try-restart genfw.service` when an
 interface comes up; one per stack, each inert where its stack is absent),
@@ -121,22 +122,26 @@ outstanding.
 
 ## Release procedure
 
-`$VERSION` in `genfw` and `Version:` in `genfw.spec` must match;
-`t/00-compile.t` enforces it, and the release workflow refuses a tag that
-does not match both. A release is:
+`$VERSION` in `genfw`, `Version:` in `genfw.spec`, and the top entry of
+`debian/changelog` (as `<version>-1`) must agree; `t/00-compile.t` enforces
+it, and the release workflow refuses a tag that does not match all three. A
+release is:
 
-1. A PR that bumps both versions and adds a `%changelog` entry in the same
-   form as the existing ones.
+1. A PR that bumps all three and adds a `%changelog` entry in the same form
+   as the existing ones plus a `debian/changelog` entry (mind the weekday;
+   lintian checks it).
 2. After it merges, a signed tag `v<version>` on master, pushed. Creating
    the release in the GitHub UI instead also works; it creates the tag.
 3. Approving the `release` environment when the workflow asks.
 
 `.github/workflows/release.yml` then builds one portable noarch RPM on EL8
 (the oldest platform with usable images; no dist tag, and building on the
-oldest target is what keeps the package installable on EL7), GPG-signs the
-RPMs and tarball with the key from the `release` environment, installs the
-result on EL7, EL9, and Fedora, attests provenance, and publishes the
-assets. A tag
+oldest target is what keeps the package installable on EL7) and a `.deb` on
+Debian stable, GPG-signs the RPMs and tarball with the key from the
+`release` environment (the `.deb` is covered by a checksum file and the
+attestation, not a per-file signature; apt signs repositories, not
+packages), installs the results on EL7, EL9, Fedora, Debian, and Ubuntu,
+attests provenance, and publishes the assets. A tag
 with a suffix (`v1.51-rc1`) is a prerelease and may run without the signing
 key; a real release requires it. Nothing in that workflow can be tested
 without pushing a tag, so use a `-rc` tag to rehearse.

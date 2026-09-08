@@ -1,0 +1,5 @@
+genfw (1.51.0-1) unstable; urgency=medium
+
+  * Initial Debian packaging.
+
+ -- Steven Pritchard <steve@kspei.com>  Tue, 08 Sep 2026 00:00:00 +0000

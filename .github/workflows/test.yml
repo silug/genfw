@@ -118,6 +118,51 @@ jobs:
       - name: rpmlint spec
         run: rpmlint --ignore-unused-rpmlintrc genfw.spec
 
+  # Debian packaging: build the .deb (the suite runs inside the build via
+  # dh_auto_test), lint it, then install it on Debian and Ubuntu and run the
+  # installed genfw. Installation must not enable the units.
+  deb:
+    name: Debian package build and install
+    runs-on: ubuntu-latest
+    container: debian:stable
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update -q
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+            build-essential debhelper perl lintian iproute2 netbase git
+
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          dpkg-buildpackage -us -uc -b
+          mkdir -p dist && cp ../genfw_*.deb dist/
+          ls -l dist
+
+      - name: lintian
+        run: lintian --fail-on warning,error --info dist/genfw_*.deb
+
+      - name: Install and run
+        run: |
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends ./dist/genfw_*.deb systemd
+          dpkg -L genfw
+          test -x /usr/sbin/genfw
+          test -x /etc/network/if-up.d/genfw
+          test -x /usr/lib/NetworkManager/dispatcher.d/90-genfw
+          man -w genfw
+          systemd-analyze verify /usr/lib/systemd/system/genfw.service /usr/lib/systemd/system/genfw-online.service
+          # Nothing may be enabled by installation.
+          test ! -e /etc/systemd/system/multi-user.target.wants/genfw.service
+          test ! -e /etc/systemd/system/multi-user.target.wants/genfw-online.service
+          cd t/sample && /usr/sbin/genfw -d 2>/dev/null | grep -c '^-A'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/
+          if-no-files-found: error
+
   rpm:
     name: RPM build and install (Fedora)
     runs-on: ubuntu-latest

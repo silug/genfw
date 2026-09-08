@@ -29,16 +29,17 @@ genfw is mature and small (one Perl script). Things to know:
   compatibility layer, and it will conflict with firewalld if both are
   enabled.
 
-The RPM targets EL7 and later. On Debian and derivatives, `iptables`,
-`iproute2`, and `perl` are all that is needed; there is no `.deb` yet, so
-install the script and unit by hand. See `TODO` for the wishlist.
+The RPM targets EL7 and later; the `.deb` targets current Debian and Ubuntu.
+See `TODO` for the wishlist.
 
 ## Installation
 
 Each [release](https://github.com/silug/genfw/releases) ships a single
-`noarch` RPM that installs on EL7, EL8, EL9, and Fedora, plus the source RPM
-and tarball. The RPMs and tarball are GPG-signed, and the public key is
-attached to each release as `RPM-GPG-KEY-genfw`. To verify and install:
+`noarch` RPM that installs on EL7, EL8, EL9, and Fedora, a `.deb` for Debian
+and Ubuntu, plus the source RPM and tarball. The RPMs and tarball are
+GPG-signed, and the public key is attached to each release as
+`RPM-GPG-KEY-genfw`; the `.deb` is covered by the signed `SHA256SUMS` and by
+the build provenance. To verify and install:
 
 ```sh
 rpm --import RPM-GPG-KEY-genfw
@@ -55,12 +56,27 @@ workflow run and commit that produced them:
 gh attestation verify genfw-<version>-1.noarch.rpm --owner silug
 ```
 
-To build the RPM yourself from a checkout:
+On Debian or Ubuntu:
+
+```sh
+sha256sum -c --ignore-missing SHA256SUMS.deb
+apt install ./genfw_<version>-1_all.deb
+mkdir -p /etc/genfw   # then write /etc/genfw/rules (see below)
+systemctl enable --now genfw.service genfw-online.service
+```
+
+The package installs the same files as the RPM plus an ifupdown hook in
+`/etc/network/if-up.d/`, and creates `/etc/genfw/`. Nothing is enabled by
+installation.
+
+To build the packages yourself from a checkout:
 
 ```sh
 make dist            # produces genfw-<version>.tar.gz and genfw-<version>-1.src.rpm
 rpmbuild -ta genfw-<version>.tar.gz
 dnf install ~/rpmbuild/RPMS/noarch/genfw-<version>-*.noarch.rpm
+
+dpkg-buildpackage -us -uc -b   # on Debian: produces ../genfw_<version>-1_all.deb
 ```
 
 The package installs `/usr/sbin/genfw`, the `genfw(8)` man page, two systemd

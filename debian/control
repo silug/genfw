@@ -1,0 +1,22 @@
+Source: genfw
+Section: net
+Priority: optional
+Maintainer: Steven Pritchard <steve@kspei.com>
+Build-Depends: debhelper-compat (= 13), perl
+Standards-Version: 4.6.2
+Homepage: https://github.com/silug/genfw
+Rules-Requires-Root: no
+
+Package: genfw
+Architecture: all
+Depends: ${misc:Depends}, ${perl:Depends}, iptables, iproute2
+Description: generate an iptables firewall from a simple rules file
+ genfw builds a complete iptables ruleset from a short configuration file
+ describing each network interface as internal, dmz, or outside, plus a
+ few flags such as nat, trusted, or allow=ssh/tcp. It derives per-interface
+ chains, every interface-to-interface path, NAT, anti-spoofing drops, and
+ rate-limited logging, with a default-deny policy.
+ .
+ The output is in iptables-restore format and is loaded atomically. Two
+ systemd units run it before the network comes up and again after, and
+ dispatcher hooks rerun it when an interface appears later.
