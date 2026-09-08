@@ -2,8 +2,3 @@
 #
 # "iptables" is the name of the tool this package drives, not a misspelling.
 addFilter(r"spelling-error .* iptables")
-
-# %systemd_postun expands to nothing on current Fedora, where file triggers
-# handle daemon-reload, but to an explicit daemon-reload on EL7 and EL8. The
-# spec keeps it for those, so the empty scriptlet on Fedora is expected.
-addFilter(r"empty-%postun")

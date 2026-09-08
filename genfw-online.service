@@ -4,17 +4,18 @@
 # quick when addresses come from ifcfg files. Interfaces that appear later
 # (a VPN, say) are handled by the dispatcher hooks, which restart
 # genfw.service.
+#
+# Not enabled separately: genfw.service wants this unit, so enabling that
+# one is enough. Requires (not Requisite) so that starting this unit by
+# hand starts the early pass if it is not already active.
 [Unit]
 Description=Configure firewall using genfw (after network is up)
 Documentation=man:genfw(8)
 Wants=network-online.target
 After=network-online.target genfw.service
-Requisite=genfw.service
+Requires=genfw.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/sbin/genfw -i
-
-[Install]
-WantedBy=multi-user.target

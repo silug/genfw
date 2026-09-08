@@ -81,13 +81,17 @@ for my $hook (qw(NetworkManager-dispatcher networkd-dispatcher if-up)) {
     my $early = read_file("$root/genfw.service");
     my $late  = read_file("$root/genfw-online.service");
     like($early, qr/^Before=network-pre\.target/m, 'genfw.service runs before network-pre.target');
-    like($early, qr/^Wants=network-pre\.target/m, 'genfw.service pulls in network-pre.target');
+    like($early, qr/^Wants=network-pre\.target genfw-online\.service/m, 'genfw.service pulls in network-pre.target and the online pass');
     like($early, qr/^RemainAfterExit=yes/m, 'genfw.service stays active so try-restart has something to restart');
+    like($early, qr/^WantedBy=multi-user\.target/m, 'genfw.service is the unit that gets enabled');
     like($late,  qr/^After=network-online\.target genfw\.service/m, 'genfw-online.service runs after the network is online and after the early pass');
     like($late,  qr/^Wants=network-online\.target/m, 'genfw-online.service pulls in network-online.target');
+    like($late,  qr/^Requires=genfw\.service/m, 'genfw-online.service starts the early pass if it is not active');
+    unlike($late, qr/^Requisite=/m, 'genfw-online.service does not use Requisite, which fails instead of starting');
+    unlike($late, qr/^\[Install\]/m, 'genfw-online.service is not enabled separately; genfw.service wants it');
     for my $unit ($early, $late) {
         like($unit, qr{^ExecStart=/usr/sbin/genfw -i$}m, 'unit runs genfw -i');
-        like($unit, qr/^WantedBy=multi-user\.target/m, 'unit is enabled into multi-user.target');
+        like($unit, qr/^RemainAfterExit=yes/m, 'unit stays active after running');
     }
 }
 

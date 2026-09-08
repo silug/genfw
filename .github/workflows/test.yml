@@ -109,7 +109,7 @@ jobs:
       # which is bash, so it is checked as bash.
       - name: shellcheck shell scripts
         run: |
-          shellcheck --severity=warning install.sh hooks/*
+          shellcheck --severity=warning install.sh hooks/* debian/genfw.postinst
           shellcheck --severity=warning --shell=bash firewall.init
 
       # rpmlint picks up genfw.rpmlintrc automatically. Its spelling filter

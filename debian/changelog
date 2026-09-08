@@ -1,3 +1,11 @@
+genfw (1.52.1-1) unstable; urgency=medium
+
+  * genfw.service pulls in genfw-online.service; only genfw.service needs
+    enabling. Upgrades restart genfw.service.
+  * genfw-online.service uses Requires rather than Requisite.
+
+ -- Steven Pritchard <steve@kspei.com>  Tue, 08 Sep 2026 03:19:38 +0000
+
 genfw (1.52.0-1) unstable; urgency=medium
 
   * New upstream release: ip(8) address source, /etc/genfw configuration

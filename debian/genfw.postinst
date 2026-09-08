@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+#DEBHELPER#
+
+# On upgrade, reload systemd and restart genfw.service so the rules are
+# regenerated with the new version (debhelper adds no such snippet when
+# --no-start is used). Nothing is started on a fresh install: a host with no
+# rules file must not start a firewall. try-restart leaves a disabled or
+# never-started unit alone.
+if [ "$1" = configure ] && [ -n "$2" ] && [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null || true
+    deb-systemd-invoke try-restart genfw.service >/dev/null || true
+    # Report a failed regeneration where the person upgrading can see it;
+    # the upgrade itself still succeeds and the previous rules stay in effect.
+    if systemctl is-failed --quiet genfw.service 2>/dev/null; then
+        echo "warning: genfw.service failed to regenerate the firewall after this upgrade;" >&2
+        echo "         see 'systemctl status genfw.service' and 'journalctl -u genfw.service'." >&2
+    fi
+fi
