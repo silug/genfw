@@ -18,11 +18,15 @@ override_dh_auto_install:
 override_dh_auto_test:
 	prove t
 
-# A host with no rules file must not start a firewall; the admin enables
-# the units after writing /etc/genfw/rules.
+# A host with no rules file must not start a firewall: nothing is enabled or
+# started on installation; the admin enables genfw.service after writing
+# /etc/genfw/rules. With --no-start debhelper adds no restart on upgrade
+# either, so debian/genfw.postinst carries one: reload systemd and
+# try-restart genfw.service, regenerating the rules with the new version.
+# genfw-online.service has no [Install] section and is pulled in by
+# genfw.service, so it is not handled here.
 override_dh_installsystemd:
 	dh_installsystemd --no-enable --no-start genfw.service
-	dh_installsystemd --no-enable --no-start genfw-online.service
 
 override_dh_auto_clean:
 	rm -f genfw.8

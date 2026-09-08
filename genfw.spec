@@ -1,5 +1,5 @@
 Name:           genfw
-Version:        1.52.0
+Version:        1.52.1
 Release:        1%{?dist}
 URL:            http://www.kspei.com/projects/genfw/
 Source0:        http://ftp.kspei.com/pub/steve/genfw/%{name}-%{version}.tar.gz
@@ -51,13 +51,28 @@ install -m 755 hooks/networkd-dispatcher \
     %{buildroot}/%{_prefix}/lib/networkd-dispatcher/routable.d/90-genfw
 
 %post
-%systemd_post genfw.service genfw-online.service
+%systemd_post genfw.service
+# On upgrade, the previous package's %%postun would normally reload systemd
+# and restart the unit, but packages before 1.52.1 had no scriptlets (or no
+# restart), so do it here as well. Reloading twice is harmless; the unit is
+# started only if it is enabled and not already active, which is the state
+# an upgrade from 1.51.0 leaves it in (its unit had no RemainAfterExit).
+if [ $1 -gt 1 ] ; then
+    systemctl daemon-reload >/dev/null 2>&1 || :
+    if systemctl is-enabled --quiet genfw.service 2>/dev/null \
+       && ! systemctl is-active --quiet genfw.service 2>/dev/null ; then
+        systemctl start genfw.service >/dev/null 2>&1 || :
+    fi
+fi
 
 %preun
 %systemd_preun genfw.service genfw-online.service
 
 %postun
-%systemd_postun genfw.service genfw-online.service
+# Reload systemd and, on upgrade, restart the unit so the rules are
+# regenerated with the new version. This runs from the package being
+# replaced, so it takes effect for upgrades from this version onward.
+%systemd_postun_with_restart genfw.service
 
 %files
 %defattr(-,root,root)
@@ -74,6 +89,16 @@ install -m 755 hooks/networkd-dispatcher \
 %{_prefix}/lib/networkd-dispatcher/routable.d/90-genfw
 
 %changelog
+* Tue Sep 08 2026 Steven Pritchard <steve@kspei.com> - 1.52.1-1
+- genfw.service now pulls in genfw-online.service; enabling genfw.service
+  is again the only step needed. genfw-online.service is no longer enabled
+  separately.
+- Upgrading the package reloads systemd and restarts genfw.service, so the
+  rules are regenerated with the new version. Upgrades from 1.51.0 and
+  earlier are handled too (those packages had no scriptlets).
+- genfw-online.service uses Requires rather than Requisite, so starting it
+  by hand starts the early pass instead of failing.
+
 * Tue Sep 08 2026 Steven Pritchard <steve@kspei.com> - 1.52.0-1
 - Learn interface addresses from ip(8) when there are no ifcfg files, so
   genfw works on RHEL 9, Fedora, Debian, and Ubuntu ("addresses" directive).

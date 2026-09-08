@@ -46,7 +46,7 @@ rpm --import RPM-GPG-KEY-genfw
 rpm -K genfw-<version>-1.noarch.rpm          # expect "OK"
 dnf install ./genfw-<version>-1.noarch.rpm   # yum localinstall on EL7
 # ...write your rules (see below), then:
-systemctl enable --now genfw.service genfw-online.service
+systemctl enable --now genfw.service
 ```
 
 Release assets also carry GitHub build provenance, which ties them to the
@@ -62,7 +62,7 @@ On Debian or Ubuntu:
 sha256sum -c --ignore-missing SHA256SUMS.deb
 apt install ./genfw_<version>-1_all.deb
 mkdir -p /etc/genfw   # then write /etc/genfw/rules (see below)
-systemctl enable --now genfw.service genfw-online.service
+systemctl enable --now genfw.service
 ```
 
 The package installs the same files as the RPM plus an ifupdown hook in
@@ -88,10 +88,12 @@ Nothing is enabled by installation.
 ### At boot and on network changes
 
 `genfw.service` runs before any interface is configured, so no traffic is
-ever handled without a firewall. `genfw-online.service` runs again after the
-network is up. With `ifcfg` files the first pass is already complete; with
-the `ip` address source the first pass lacks address-dependent rules
-(anti-spoof filtering, NAT) and the second pass adds them. Enable both.
+ever handled without a firewall, and pulls in `genfw-online.service`, which
+runs again after the network is up. With `ifcfg` files the first pass is
+already complete; with the `ip` address source the first pass lacks
+address-dependent rules (anti-spoof filtering, NAT) and the second pass adds
+them. Only `genfw.service` needs enabling. Upgrading the package restarts
+it, so the rules are regenerated with the new version.
 
 Interfaces that appear later, such as a VPN, trigger a rerun through hooks
 that call `systemctl try-restart genfw.service`: for NetworkManager, for

@@ -62,7 +62,7 @@ sub format_iptables_restore;
 sub quote_restore;
 sub apply_ruleset;
 
-our $VERSION="1.52.0";
+our $VERSION="1.52.1";
 
 our %interface=();
 our %conf=();
@@ -1430,14 +1430,17 @@ using the C<ifcfg> address source.
 
 Two units are installed. C<genfw.service> runs C<genfw -i> before any
 interface is configured (C<Before=network-pre.target>), so no traffic is
-ever handled without a firewall. C<genfw-online.service> runs it again after
-C<network-online.target>. With the C<ifcfg> address source the first pass is
-already complete and the second is a harmless repeat. With the C<ip> source
-the first pass lacks whatever depends on addresses (network and broadcast
-filtering, NAT) because nothing has an address yet, and the second pass adds
-it. Enable both:
+ever handled without a firewall, and pulls in C<genfw-online.service>, which
+runs it again after C<network-online.target>. With the C<ifcfg> address
+source the first pass is already complete and the second is a harmless
+repeat. With the C<ip> source the first pass lacks whatever depends on
+addresses (network and broadcast filtering, NAT) because nothing has an
+address yet, and the second pass adds it. Only the first needs enabling:
 
-    systemctl enable --now genfw.service genfw-online.service
+    systemctl enable --now genfw.service
+
+Upgrading the package reloads systemd and restarts C<genfw.service>, so the
+rules are regenerated with the new version.
 
 Interfaces that appear after boot (a VPN, a hotplugged device) are covered
 by hooks that run C<systemctl try-restart genfw.service> when an interface
@@ -1450,8 +1453,8 @@ and does not need one, since dynamic addresses are never written into the
 rules. After changing a static address by hand, run
 C<systemctl restart genfw.service>.
 
-Neither unit is enabled by installation: a host with no F<rules> file must
-not start a firewall.
+Nothing is enabled by installation: a host with no F<rules> file must not
+start a firewall.
 
 =head1 NOTES
 

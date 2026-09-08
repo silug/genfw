@@ -18,8 +18,10 @@ job in CI enforces this; check there before assuming a construct is fine.
 
 Everything else is packaging or testing: `genfw.spec` and `genfw.rpmlintrc`
 (RPM), `debian/` (Debian package; built with `dpkg-buildpackage -us -uc -b`,
-the suite runs inside the build), `genfw.service` and `genfw-online.service` (the two-pass boot: before
-`network-pre.target`, then after `network-online.target`), `hooks/` (network
+the suite runs inside the build), `genfw.service` and `genfw-online.service`
+(the two-pass boot: before `network-pre.target`, then after
+`network-online.target`; only the first is enabled, it `Wants` the second;
+package upgrades restart the first), `hooks/` (network
 dispatcher hooks that `systemctl try-restart genfw.service` when an
 interface comes up; one per stack, each inert where its stack is absent),
 `firewall.init` (legacy SysV init), `install.sh`, `Makefile`, the test suite
