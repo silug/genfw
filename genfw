@@ -1235,8 +1235,7 @@ Install the ruleset: pipe it to C<iptables-restore> instead of printing it.
 The ruleset is first checked with C<iptables-restore --test>, so a ruleset
 that cannot be parsed is rejected before anything is changed; only then is
 it loaded. A failure at either step is fatal, since it means the firewall
-was not (or not fully) updated. This is what the systemd unit and the init
-script run.
+was not (or not fully) updated. This is what the systemd units run.
 
 =item B<-d>
 

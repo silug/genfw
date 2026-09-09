@@ -30,7 +30,8 @@ genfw is mature and small (one Perl script). Things to know:
   enabled.
 
 The RPM targets EL7 and later; the `.deb` targets current Debian and Ubuntu.
-See `TODO` for the wishlist.
+Planned work is tracked in the
+[GitHub issues](https://github.com/silug/genfw/issues).
 
 ## Installation
 
@@ -102,10 +103,10 @@ Each hook is only run by its own network stack, and `try-restart` does
 nothing unless genfw is enabled and active. After changing a static address
 by hand, `systemctl restart genfw.service`.
 
-Without packaging, `make install` runs `install.sh`, which installs the
-script under `/usr/local`, the SysV init script `firewall.init` as
-`/etc/rc.d/init.d/firewall`, and registers it with `chkconfig`. `install.sh`
-honors `PREFIX`, `BINDIR`, `MANDIR`, `INITDIR`, and `CONFIGDIR`.
+Without packaging, `make install` puts the same files in place under
+`/usr` (`PREFIX`, `DESTDIR`, and the individual directory variables in the
+Makefile can override that). Nothing is enabled; write your rules, then
+`systemctl enable --now genfw.service`.
 
 Runtime requirements are Perl and `iptables`. On Fedora the `perl-DirHandle`
 package is also needed; the RPM pulls it in automatically.
@@ -212,8 +213,6 @@ window with a flushed, open firewall. Treat `-i` as a full reload. Before
 loading, `-i` runs `iptables-restore --test` on the ruleset, so one that
 cannot be parsed is rejected before anything changes. If either step fails,
 genfw exits non-zero and reports it.
-On systems using the SysV script, `service firewall start` does the same and
-also loads any kernel modules listed in `/etc/sysconfig/genfw/modules`.
 
 To try a configuration without root and without touching the live firewall,
 use `-d`. It reads `./genfw/rules` and `./network-scripts/ifcfg-*` from the

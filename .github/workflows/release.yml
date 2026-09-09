@@ -51,7 +51,7 @@ jobs:
         run: >-
           dnf install -y --setopt=install_weak_deps=False
           git make rpm-build rpm-sign rpmdevtools 'dnf-command(builddep)'
-          gnupg2 perl perl-ExtUtils-MakeMaker systemd
+          gnupg2 perl systemd
 
       - uses: actions/checkout@v4
         with:
