@@ -210,8 +210,11 @@ Red Hat systems and in `iptables` on Debian; that package must be installed
 even though `iptables` itself is never run. The output starts with
 `#!/usr/sbin/nft -f`, and each of genfw's tables (`ip filter`, `nat`,
 `mangle`, `raw`) is deleted and recreated within the file, so loading it
-replaces them atomically and leaves every other nft table alone. The chains
-keep their iptables names, but inspect the result with `nft list ruleset`,
+replaces them atomically and leaves every other nft table alone. Those four
+tables are the ones the nftables-backed iptables uses too, so rules another
+tool (Docker, libvirt) added to them through iptables are replaced as well,
+exactly as with the `iptables-restore` format. The chains keep their
+iptables names, but inspect the result with `nft list ruleset`,
 not `iptables-save`: the nftables-backed iptables tools can only read back
 rules they created themselves and report these tables as incompatible. A
 rule with no nft translation is a fatal error rather than a silently

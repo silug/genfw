@@ -1569,7 +1569,10 @@ on Debian; it must be installed even though C<iptables> itself is never
 run. The output begins with C<#!/usr/sbin/nft -f>. Each of genfw's tables
 (C<ip filter>, C<nat>, C<mangle>, C<raw>) is deleted and recreated within
 the file, so C<nft -f> replaces them atomically and leaves every other nft
-table alone. The chains keep their iptables names, but inspect the result
+table alone. Those four tables are the ones the nftables-backed iptables
+uses too, so anything another tool (Docker, libvirt) added to them through
+iptables is replaced as well, exactly as the C<iptables-restore> format
+replaces them. The chains keep their iptables names, but inspect the result
 with C<nft list ruleset>, not C<iptables-save>: the nftables-backed iptables
 tools can only read back rules they created themselves and report these
 tables as incompatible. A rule that has no nft translation (an unusual

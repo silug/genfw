@@ -164,10 +164,11 @@ jobs:
   rpm:
     name: RPM build and install (Fedora)
     runs-on: ubuntu-latest
-    # NET_ADMIN so the installed genfw can load a ruleset with -i for real.
+    # NET_ADMIN so the installed genfw can load a ruleset with -i for real,
+    # SYS_ADMIN so that can happen in a private network namespace.
     container:
       image: fedora:latest
-      options: --cap-add=NET_ADMIN --cap-add=NET_RAW
+      options: --cap-add=NET_ADMIN --cap-add=NET_RAW --cap-add=SYS_ADMIN
     steps:
       - name: Install build tools
         run: >-
@@ -223,20 +224,26 @@ jobs:
           iptables-restore --version
 
       # The real thing: the installed genfw generates and loads the sample
-      # ruleset with -i, and iptables-save reports every rule.
+      # ruleset with -i, and iptables-save reports every rule. Loaded inside
+      # a private network namespace: the job container's own namespace
+      # carries Docker's embedded-DNS rules in the nft "ip nat" table, and
+      # loading a firewall there breaks name resolution for the rest of the
+      # job (which is how this was discovered).
       - name: Load the sample ruleset with genfw -i
         working-directory: t/sample
         run: |
           /usr/sbin/genfw -d 2>/dev/null > /tmp/sample.rules
+          unshare -n sh -e <<'EOS'
           /usr/sbin/genfw -d -i
           echo "rules generated: $(grep -c '^-A' /tmp/sample.rules), loaded: $(iptables-save | grep -c '^-A')"
           test "$(grep -c '^-A' /tmp/sample.rules)" -eq "$(iptables-save | grep -c '^-A')"
+          EOS
 
       # The nft backend, for real: translate, nft -c, nft -f, then count the
       # loaded rules with nft (iptables-nft cannot read back rules it did
       # not create itself). A rule line in "nft -a list ruleset" is two tabs
       # deep and carries a handle; chain headers and "type ... hook" lines
-      # do not.
+      # do not. Same private namespace reasoning as above.
       - name: Load the sample ruleset with genfw -o nft -i
         working-directory: t/sample
         run: |
@@ -245,12 +252,14 @@ jobs:
           dnf install -y --setopt=install_weak_deps=False nftables iptables-nft
           /usr/sbin/genfw -d -o nft 2>/dev/null > /tmp/sample.nft
           head -3 /tmp/sample.nft
+          unshare -n sh -e <<'EOS'
           /usr/sbin/genfw -d -o nft -i
           nft list tables
           loaded=$(nft -a list ruleset | grep -cP '^\t\t.*# handle \d+$')
           echo "nft rules in file: $(grep -c '^add rule' /tmp/sample.nft), loaded: $loaded"
           test "$loaded" -gt 50
           test "$(grep -c '^add rule' /tmp/sample.nft)" -eq "$loaded"
+          EOS
 
       - uses: actions/upload-artifact@v4
         with:
