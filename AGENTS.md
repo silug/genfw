@@ -189,11 +189,22 @@ Non-obvious design points, each visible in `generate_rules`:
   `%ruleset` intermediate representation through `chain()`, `policy()`, and
   `rule("[table:]chain", @iptables_args)`; comment helpers queue text that
   attaches to the next rule. An output backend in `%backend` then formats
-  the whole thing (`format_iptables_restore`) and, under `-i`, pipes it to
-  the backend's `test` command first (`iptables-restore --test`) and then
-  its `apply` command. Record rules only through `rule()`, and add a new
-  output format (an `nft -f` backend is planned) as a new formatter plus
-  apply command in `%backend`, never by printing from generation code.
+  the whole thing and, under `-i`, pipes it to the backend's `test` command
+  first and then its `apply` command. Two backends exist: `iptables-restore`
+  (`format_iptables_restore`) and `nft` (`format_nft`, which runs the
+  iptables-restore text through `iptables-restore-translate`, strips its
+  timestamps, wraps each table in an add/delete/add idiom for atomic
+  replacement, and dies on any rule the translator left as a comment). The
+  backend comes from `-o`, else the `format` directive (not `output`, which
+  is an interface-type alias), else
+  `iptables-restore`. Record rules only through `rule()`; add a format as a
+  new `%backend` entry, never by printing from generation code. Rules stay
+  iptables argument lists on purpose: translating arbitrary iptables syntax
+  is the translator's job, not genfw's. `t/13-nft.t` pins the nft output
+  and, where nft and `unshare -rn` work, loads it for real and counts the
+  rules with `nft -a list ruleset`. Don't try to verify the nft path with
+  `iptables-save`: iptables-nft only reads back rules it created itself and
+  reports everything else as "incompatible".
 - `filter:` is the default table and is stripped at parse time, so
   `filter:INPUT` and `INPUT` are the same key everywhere downstream.
 - Chain naming: one chain per interface (`label($in)`), one per ordered pair

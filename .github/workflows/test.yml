@@ -30,6 +30,7 @@ jobs:
               dnf install -y --setopt=install_weak_deps=False
               git make perl perl-DirHandle perl-Test-Simple perl-Test-Harness
               perl-Test-Pod perl-podlators
+              iptables-nft nftables
           # Enterprise Linux 9 (perl-Test-Pod is EPEL-only; the POD test
           # skips itself when the module is missing).
           - name: EL9
@@ -38,6 +39,7 @@ jobs:
               dnf install -y --setopt=install_weak_deps=False
               git make perl perl-DirHandle perl-Test-Simple perl-Test-Harness
               perl-podlators
+              iptables-nft nftables
           # Debian-family runner with a stock perl, which bundles the core
           # modules. Runs directly on the host runner (no container).
           - name: Ubuntu
@@ -45,7 +47,7 @@ jobs:
             install: >-
               sudo apt-get update -q &&
               sudo apt-get install -y -q --no-install-recommends
-              make perl libtest-pod-perl netbase iptables
+              make perl libtest-pod-perl netbase iptables nftables
     steps:
       - name: Install dependencies
         run: ${{ matrix.install }}
@@ -126,7 +128,7 @@ jobs:
         run: |
           apt-get update -q
           DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
-            build-essential debhelper perl lintian iproute2 netbase git
+            build-essential debhelper perl lintian iproute2 netbase git iptables nftables
 
       - uses: actions/checkout@v4
 
@@ -229,6 +231,26 @@ jobs:
           /usr/sbin/genfw -d -i
           echo "rules generated: $(grep -c '^-A' /tmp/sample.rules), loaded: $(iptables-save | grep -c '^-A')"
           test "$(grep -c '^-A' /tmp/sample.rules)" -eq "$(iptables-save | grep -c '^-A')"
+
+      # The nft backend, for real: translate, nft -c, nft -f, then count the
+      # loaded rules with nft (iptables-nft cannot read back rules it did
+      # not create itself). A rule line in "nft -a list ruleset" is two tabs
+      # deep and carries a handle; chain headers and "type ... hook" lines
+      # do not.
+      - name: Load the sample ruleset with genfw -o nft -i
+        working-directory: t/sample
+        run: |
+          # The RPM's "iptables" requirement may be met by iptables-legacy;
+          # the translator lives in iptables-nft.
+          dnf install -y --setopt=install_weak_deps=False nftables iptables-nft
+          /usr/sbin/genfw -d -o nft 2>/dev/null > /tmp/sample.nft
+          head -3 /tmp/sample.nft
+          /usr/sbin/genfw -d -o nft -i
+          nft list tables
+          loaded=$(nft -a list ruleset | grep -cP '^\t\t.*# handle \d+$')
+          echo "nft rules in file: $(grep -c '^add rule' /tmp/sample.nft), loaded: $loaded"
+          test "$loaded" -gt 50
+          test "$(grep -c '^add rule' /tmp/sample.nft)" -eq "$loaded"
 
       - uses: actions/upload-artifact@v4
         with:
