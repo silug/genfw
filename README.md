@@ -13,7 +13,9 @@ format `iptables-save` produces, so you can read it, diff it against a running
 system, or load it in one atomic step. It starts with a
 `#!/usr/sbin/iptables-restore` line, so a saved copy can be made executable
 and run to load itself. With `-i` genfw loads it directly, which is what the
-systemd unit does at boot.
+systemd unit does at boot. For hosts running nftables without the iptables
+compatibility layer, `format nft` (or `-o nft`) produces the same ruleset in
+`nft -f` syntax instead; see below.
 
 ## Status
 
@@ -188,6 +190,7 @@ Each `allow=` item is `port[/proto][:src[:dst[:iface]]]`:
 | `policy` [*table*`:`]*chain* *target* | Set a built-in chain's policy. Defaults are `INPUT DROP`, `OUTPUT ACCEPT`, `FORWARD DROP`. |
 | `no logging`, `limit logging`, `full logging` | Control logging of dropped packets. `limit` is the default and adds `-m limit` to every `LOG` rule. |
 | `include` *file* | Read more rules from *file*, a path relative to the configuration directory or absolute, and it may be a glob. |
+| `format` `iptables-restore` or `nft` | Which loader the ruleset is written for. Default `iptables-restore`; `-o` on the command line overrides. See "nft output" below. |
 | `addresses` `ifcfg` or `ip` | Where interface addresses come from: Red Hat `ifcfg-*` files, or the running system via `ip -o -4 addr show`. Default: `ifcfg` if any `ifcfg-*` file exists, else `ip`. With `ip`, run genfw after the network is up (order the unit after `network-online.target`, or re-run from a dispatcher hook); a DHCP-assigned address is treated like `BOOTPROTO=dhcp`. |
 
 genfw defines three chains you can jump to from your own rules: `acceptnew`
@@ -197,6 +200,26 @@ and `icmp-filter`.
 The full reference is the man page, `genfw(8)`, or `perldoc ./genfw` in a
 checkout.
 
+### nft output
+
+With `format nft` in the rules file (or `genfw -o nft`), the ruleset comes
+out in `nft -f` syntax, for hosts that run nftables directly. genfw builds
+its rules as iptables arguments and has them translated by
+`iptables-restore-translate`, which ships in the `iptables-nft` package on
+Red Hat systems and in `iptables` on Debian; that package must be installed
+even though `iptables` itself is never run. The output starts with
+`#!/usr/sbin/nft -f`, and each of genfw's tables (`ip filter`, `nat`,
+`mangle`, `raw`) is deleted and recreated within the file, so loading it
+replaces them atomically and leaves every other nft table alone. Those four
+tables are the ones the nftables-backed iptables uses too, so rules another
+tool (Docker, libvirt) added to them through iptables are replaced as well,
+exactly as with the `iptables-restore` format. The chains keep their
+iptables names, but inspect the result with `nft list ruleset`,
+not `iptables-save`: the nftables-backed iptables tools can only read back
+rules they created themselves and report these tables as incompatible. A
+rule with no nft translation is a fatal error rather than a silently
+missing rule. Comments from the rules are not carried into the nft output.
+
 ## Running it
 
 ```sh
@@ -205,6 +228,7 @@ genfw -c /path/to/dir > out.rules # ...using another configuration directory
 iptables-restore < firewall.rules # load it by hand...
 chmod +x firewall.rules && ./firewall.rules   # ...or run it; the #! line invokes iptables-restore
 genfw -i                          # generate and load in one step (what the systemd unit does)
+genfw -o nft > firewall.nft       # the same ruleset for nft -f (see "nft output")
 ```
 
 The ruleset lists every table, so loading it replaces the whole firewall:

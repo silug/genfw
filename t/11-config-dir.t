@@ -63,7 +63,7 @@ my %ifcfg = (
 
     $res = run_genfw($dir, opts => ['-d', '-x']);
     isnt($res->{status}, 0, 'an unknown option is fatal');
-    like($res->{stderr}, qr/Usage: genfw \[-c config-dir\] \[-d\] \[-i\]/, 'with a usage line');
+    like($res->{stderr}, qr/Usage: genfw \[-c config-dir\] \[-o iptables-restore\|nft\] \[-d\] \[-i\]/, 'with a usage line');
 
     my $empty = make_fixture(files => { 'conf/.keep' => '' });
     $res = run_genfw($empty, opts => ['-d', '-c', "$empty/conf"]);
